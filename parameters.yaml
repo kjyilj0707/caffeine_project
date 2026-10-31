@@ -1,0 +1,156 @@
+# 카페인 계산 엔진 파라미터
+# 모든 숫자는 여기서만 바꾼다. 코드에는 숫자를 직접 쓰지 않는다.
+# status: confirmed = 원문 확인 / provisional = 임시값 (나중에 교체)
+# 출처 상세는 노션 「논문 DB」 참고
+
+pk:  # ③ 체내 카페인 (1구획 흡수·분해 모델)
+  half_life_h:
+    value: 5.0
+    range: [2.0, 10.0]
+    source: "Gardiner 2023 (건강한 성인 2~10h); Nehlig 2018"
+    status: confirmed
+  absorption_rate_per_h:
+    value: 2.77   # 몸속 최고치 약 68분 뒤
+    source: "Ramakrishnan 2016 Table 3 (캡슐 2.06, 껌 3.21 → 액체 커피는 그 사이); Gardiner 2023 (최고치 30~120분)"
+    status: confirmed
+
+caffeine_effect:  # ④에서 쓰는 카페인 → 각성 효과 (Ramakrishnan 2016, 식 1·6)
+  # 졸림(결손) × g,  g = 1 / (1 + Mc·ka/(ka−kc)·(e^(−kc·t) − e^(−ka·t))),  Mc = M0·c,  kc = k0·e^(−z·c),  c = 용량(g)
+  m0_per_g:
+    value: {mean_rt: 3.59, lapse: 9.86}
+    source: "Ramakrishnan 2016 Table 3 (반응 속도 / 주의력 실수)"
+    status: confirmed
+  default_metric:
+    value: mean_rt
+    source: "Vital-Lopez 2018이 최적화에 쓴 지표 (보수적: 효과를 작게 봄)"
+    status: provisional
+  k0_per_h:
+    value: 0.49
+    source: "Ramakrishnan 2016 Table 3"
+    status: confirmed
+  z_per_g:
+    value: 1.63
+    source: "Ramakrishnan 2016 Table 3 (용량이 클수록 효과가 오래감)"
+    status: confirmed
+  reference_score:
+    value: 14
+    source: "설계값: 졸림(결손) = 14 − 각성 점수 (Åkerstedt 14 = 매우 또렷 = 결손 없음)"
+    status: provisional
+  multi_dose:
+    value: sum
+    source: "설계값: 여러 잔은 g의 분모 안에서 더함. 원래 방법은 Ramakrishnan 2014(J Theor Biol) → 미확인"
+    status: provisional
+
+limits:  # ① 상한·하한
+  daily_mg_adult:
+    value: 400
+    source: "식약처 권고량"
+    status: confirmed
+  daily_mg_pregnant:
+    value: 300
+    source: "식약처 권고량"
+    status: confirmed
+  daily_mg_per_kg_youth:
+    value: 2.5
+    source: "식약처 권고량 (어린이·청소년)"
+    status: confirmed
+  single_dose_mg:
+    value: 200
+    source: "EFSA 2015 (1회 200mg, 약 3mg/kg)"
+    status: confirmed
+  single_dose_mg_per_kg:
+    value: 3.0
+    source: "EFSA 2015"
+    status: confirmed
+  min_effective_dose_mg:
+    value: 40
+    source: "McLellan 2016 (약 40mg, 0.5mg/kg부터 효과)"
+    status: confirmed
+
+half_life_multipliers:  # ① 개인 보정 (반감기 × 배수)
+  smoking:
+    value: 0.6
+    source: "Nehlig 2018, Grzegorzewski 2022 (방향만 확인, 크기는 PK-DB로 확정 예정)"
+    status: provisional
+  oral_contraceptive:
+    value: 1.8
+    source: "Nehlig 2018, Grzegorzewski 2022 (방향만 확인)"
+    status: provisional
+  pregnancy_trimester_1:
+    value: 1.2
+    source: "Nehlig 2018 (2차 자료)"
+    status: provisional
+  pregnancy_trimester_2:
+    value: 1.8
+    source: "Nehlig 2018 (2차 자료)"
+    status: provisional
+  pregnancy_trimester_3:
+    value: 3.0
+    source: "Nehlig 2018, EFSA 발표자료 (후기 최대 약 15~16h)"
+    status: provisional
+
+sleep_protection:  # ④ 수면 보호 기준
+  bedtime_residual_mg:
+    value: 30
+    by_sensitivity: {sensitive: 20, normal: 30, tolerant: 40}
+    source: "Gardiner 2023 컷오프(107mg/8.8h, 217.5mg/13.2h)를 반감기 5h로 역산 → 32·35mg"
+    status: confirmed   # 30은 근거 있음, 민감도별 폭은 임시
+  sleep_loss_model:
+    intercept_min: 21.02
+    per_min_before_bed: -0.05
+    per_mg: 0.16
+    source: "Gardiner 2023 메타회귀 (Fig. 3으로 부호 검산)"
+    status: confirmed
+  meaningful_sleep_loss_min:
+    value: 20
+    source: "Gardiner 2023 인용 미국수면학회 지침 (Sateia 2017)"
+    status: confirmed
+
+fatigue:  # ② 피로도 (Åkerstedt 3-프로세스 모델, 1~21점)
+  s_wake_lower_asymptote: {value: 2.4, source: "Åkerstedt 2004", status: confirmed}
+  s_wake_rate_per_h: {value: 0.0353, source: "Åkerstedt 2004", status: confirmed}
+  s_at_awakening_default: {value: 14.0, source: "Åkerstedt 2004", status: confirmed}
+  s_sleep_upper_asymptote: {value: 14.3, source: "Åkerstedt 2004", status: confirmed}
+  s_sleep_rate_per_h: {value: 0.381, source: "Åkerstedt 2004", status: confirmed}
+  s_at_retiring_default: {value: 7.96, source: "Åkerstedt 2004", status: confirmed}
+  s_recovery_breakpoint:
+    value: 12.5
+    source: "Åkerstedt 2004 (값 확인). 해석: S가 12.5 미만이면 회복 속도를 S=12.5일 때 속도로 제한 → 수면 부족 누적(Van Dongen 2003) 재현. PDF 수식이 깨져 해석은 임시"
+    status: provisional
+  c_amplitude: {value: 2.5, source: "Åkerstedt 2004", status: confirmed}
+  c_acrophase_h:
+    value: 16.8
+    source: "Åkerstedt 2004엔 기본값 없음 → Åkerstedt & Folkard 1997에서 확인 예정"
+    status: provisional
+  chronotype_shift_h:
+    value: {morning: -1.0, neutral: 0.0, evening: 1.0}
+    source: "설계값 (아침형은 리듬 정점이 앞으로, 저녁형은 뒤로)"
+    status: provisional
+  u_amplitude: {value: 0.5, source: "Åkerstedt 2004 (U = −0.5·cos, 12시간 주기, C 정점 3시간 전이 골짜기)", status: confirmed}
+  u_phase_offset_h: {value: -3.0, source: "Åkerstedt 2004", status: confirmed}
+  w_initial: {value: 5.7, source: "Åkerstedt 2004", status: confirmed}
+  w_decay_per_h: {value: 0.65692, source: "Åkerstedt 2004", status: confirmed}
+  danger_threshold: {value: 7, source: "Åkerstedt 2004 (7 = 졸음 위험선)", status: confirmed}
+  sleep_quality_recovery_factor:
+    value: {1: 0.8, 2: 0.85, 3: 0.9, 4: 0.95, 5: 1.0}
+    source: "설계값 (수면 질 1~5점 → 회복 속도 배수)"
+    status: provisional
+
+targets:  # ④ 목표 구간별 목표 각성 점수
+  must_not_sleep: {value: 10, source: "설계값 (위험선 7 + 여유)", status: provisional}
+  peak_focus: {value: 13, source: "설계값 (14 = 매우 또렷)", status: provisional}
+  stay_awake: {value: 7, source: "Åkerstedt 2004 위험선", status: confirmed}
+
+conversion:  # ⑤ mg → 음료·모금
+  coffee_mg_per_ml:
+    value: 0.428   # 107mg / 250ml
+    source: "Gardiner 2023 인용 (Desbrow 2012)"
+    status: confirmed
+  black_tea_mg_per_ml:
+    value: 0.188   # 47mg / 250ml
+    source: "Gardiner 2023 인용 (Chin 2008)"
+    status: confirmed
+  sip_ml:
+    value: 17.5
+    source: "설계값 (사용자가 첫 사용 때 보정)"
+    status: provisional

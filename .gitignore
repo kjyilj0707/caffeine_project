@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.DS_Store
+
+# 논문 원문은 저작권 때문에 올리지 않는다 (목록은 papers/README.md)
+papers/*
+!papers/README.md
+ScienceDirect_articles_*/
