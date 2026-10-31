@@ -54,6 +54,14 @@ limits:  # ① 상한·하한
     value: 2.5
     source: "식약처 권고량 (어린이·청소년)"
     status: confirmed
+  adult_age:
+    value: 19
+    source: "식약처 '어린이·청소년' 기준 (19세 미만)"
+    status: confirmed
+  daily_mg_lactating:
+    value: 200
+    source: "EFSA 2015 (수유부 하루 200mg, 식약처는 별도 수치 없음)"
+    status: confirmed
   single_dose_mg:
     value: 200
     source: "EFSA 2015 (1회 200mg, 약 3mg/kg)"
@@ -196,4 +204,18 @@ conversion:  # ⑤ mg → 음료·모금
   sip_ml:
     value: 17.5
     source: "설계값 (사용자가 첫 사용 때 보정)"
+    status: provisional
+
+metrics:  # 지표 계산용
+  sleep_need_h:
+    value: 8.0
+    source: "성인 권장 수면 7~9시간의 가운데 (National Sleep Foundation, Gardiner 2023·Irwin 2020 인용)"
+    status: confirmed
+  sleep_debt_days:
+    value: 7
+    source: "설계값 (최근 1주 수면 부채)"
+    status: provisional
+  cap_warning_levels:
+    value: [0.8, 1.0]
+    source: "설계서 지표 7 (상한의 80%·100%에서 경고)"
     status: provisional

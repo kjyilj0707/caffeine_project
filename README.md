@@ -27,12 +27,13 @@ flowchart LR
 
 | 단계 | 하는 일 | 근거 논문 | 상태 |
 | --- | --- | --- | --- |
-| ① 개인 파라미터 | 반감기(기본 5h), 하루·1회 상한, 흡연·피임약·임신 보정 | 식약처, EFSA 2015, Nehlig 2018 | 숫자 준비 |
+| ① 개인 파라미터 | 반감기(기본 5h), 하루·1회 상한, 흡연·피임약·임신 보정, 간질환·약물이면 상담 안내 | 식약처, EFSA 2015, Nehlig 2018 | ✅ `profile.py` |
 | ② 피로도 | 수면 압력 + 생체 리듬 + 오후 처짐 + 기상 직후 멍함 → 각성 점수(14 또렷 · 7 위험선) | Åkerstedt 2004, Van Dongen 2003 | ✅ `fatigue.py` |
 | ③ 체내 카페인 | 1구획 흡수·분해 모델, 여러 잔은 합산 | Gardiner 2023, Ramakrishnan 2016 | ✅ `pk.py` |
 | 카페인 효과 | 졸림 × g (100mg → 졸림 약 19%↓, 3~4시간 지속) | Ramakrishnan 2016 (2B-Alert) | ✅ `effect.py` |
 | ④ 최적화 | 졸림은 최대한 줄이고, 위험선 7 지키기 · 잠든 뒤 잔량 ≤ 30mg · 수면 감소 < 20분 · 상한 · 2시간 간격 | Vital-Lopez 2018, Gardiner 2023 | ✅ `optimizer.py` |
-| ⑤ 변환 | 커피 0.43mg/ml 등 → 모금 수 | Gardiner 2023 인용값 | 예정 |
+| ⑤ 변환 | 커피 0.43mg/ml 등 → 모금 수 (반대로 'n모금 마심' → mg) | Gardiner 2023 인용값 | ✅ `convert.py` |
+| 지표 | 상한 대비 %, 위험선 위 시간 비율, 수면 부채, 일·주·월 리포트 | 식약처, NSF(7~9h) | ✅ `metrics.py` |
 
 **핵심 숫자**
 - 하루 상한 성인 400mg · 임산부 300mg · 청소년 2.5mg/kg (식약처), 1회 200mg (EFSA)
@@ -40,6 +41,28 @@ flowchart LR
 - 예상 수면 감소(분) = 21.02 − 0.05 × (취침 전 분) + 0.16 × (mg) — Gardiner 2023 메타회귀
 
 모든 숫자는 [`parameters.yaml`](parameters.yaml)에 **출처**와 **확정/임시** 상태와 함께 있습니다. 코드에는 숫자를 직접 쓰지 않습니다.
+
+## 결과 카드 예시
+
+```text
+☕ 오늘의 카페인 플랜
+
+  13:45  커피 13모금 (228ml · 약 97mg)
+  13:45 이후엔 플랜 외 카페인 금지
+  ⛔ 21:30부터는 한 모금도 금지 (수면 보호)
+
+오늘 총 100mg / 상한 400mg (25%)
+잠든 뒤 몸속 카페인 최대 29.2mg (기준 30) · 예상 수면 감소 9.3분 (기준 20)
+목표 구간 졸림 7% 감소
+최근 1주 수면 부채 4.5시간
+```
+
+```python
+from caffeine_engine.pipeline import run_day, format_card
+from caffeine_engine.profile import Profile
+result = run_day(Profile(age=24, weight_kg=70), sleeps, windows, bed_h=23.0, now_h=8.0)
+print(format_card(result))
+```
 
 ## 지금까지 알게 된 것
 
@@ -56,8 +79,8 @@ flowchart LR
 | 경로 | 내용 |
 | --- | --- |
 | `parameters.yaml` | 엔진의 모든 숫자 + 출처 + 확정/임시 상태 |
-| `caffeine_engine/` | 계산 엔진 (`pk.py` 체내 카페인 · `fatigue.py` 피로도 · `effect.py` 카페인 효과 · `optimizer.py` 섭취 플랜) |
-| `tests/` | 논문 결과 재현 + 규칙 준수 검사 (43개) |
+| `caffeine_engine/` | 계산 엔진 — `profile.py` ① · `fatigue.py` ② · `pk.py` ③ · `effect.py` 카페인 효과 · `optimizer.py` ④ · `convert.py` ⑤ · `metrics.py` 지표 · `pipeline.py` 전체 실행 + 결과 카드 |
+| `tests/` | 논문 결과 재현 + 규칙 준수 검사 (61개) |
 | `scripts/` | 확인용 그래프 스크립트 (`daychart.py` 공통 그리기) |
 | `figures/` | 그래프 결과물 |
 | `papers/` | 논문 목록 (PDF는 저작권 때문에 로컬 전용) |
@@ -80,7 +103,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # 처음 �
 - [x] Step 1-2 — 피로도
 - [x] Step 1-3 — 카페인 효과
 - [x] Step 1-4 — 최적화 (섭취 플랜 · 컷오프)
-- [ ] Step 1-5 — 모금 변환 · 지표 10종
+- [x] Step 1-5 — 개인 파라미터 · 모금 변환 · 지표 · 전체 실행기
 - [ ] Step 1-6 — 데모
 - [ ] Step 2~ — 입력 화면, 알림, 리포트, 음료 DB, 피드백 개인화
 
