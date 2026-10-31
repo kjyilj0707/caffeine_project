@@ -79,9 +79,10 @@ print(format_card(result))
 | 경로 | 내용 |
 | --- | --- |
 | `parameters.yaml` | 엔진의 모든 숫자 + 출처 + 확정/임시 상태 |
-| `caffeine_engine/` | 계산 엔진 — `profile.py` ① · `fatigue.py` ② · `pk.py` ③ · `effect.py` 카페인 효과 · `optimizer.py` ④ · `convert.py` ⑤ · `metrics.py` 지표 · `pipeline.py` 전체 실행 + 결과 카드 |
-| `tests/` | 논문 결과 재현 + 규칙 준수 검사 (61개) |
-| `scripts/` | 확인용 그래프 스크립트 (`daychart.py` 공통 그리기) |
+| `caffeine_engine/` | 계산 엔진 — `profile.py` ① · `fatigue.py` ② · `pk.py` ③ · `effect.py` 카페인 효과 · `optimizer.py` ④ · `convert.py` ⑤ · `metrics.py` 지표 · `pipeline.py` 전체 실행 + 결과 카드 · `scenario.py` 시나리오 파일 읽기 |
+| `tests/` | 논문 결과 재현 + 규칙 준수 검사 (69개) |
+| `scenarios/` | **데모 입력 파일** — 고쳐서 다시 실행하면 결과가 바뀜 |
+| `scripts/` | `demo.py` 데모 · 확인용 그래프 스크립트 (`daychart.py` 공통 그리기) |
 | `figures/` | 그래프 결과물 |
 | `papers/` | 논문 목록 (PDF는 저작권 때문에 로컬 전용) |
 
@@ -90,11 +91,35 @@ print(format_card(result))
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # 처음 한 번
 
-.venv/bin/python -m pytest -q                      # 테스트
-.venv/bin/python scripts/plot_body_caffeine.py     # 체내 카페인 그래프
-.venv/bin/python scripts/plot_day_overview.py      # 각성 점수 + 체내 카페인 그래프
-.venv/bin/python scripts/plot_plan.py              # 엔진 추천 플랜 그래프
+.venv/bin/python scripts/demo.py                          # 데모: scenarios/ 시나리오 전부
+.venv/bin/python scripts/demo.py scenarios/exam_day.yaml  # 시나리오 하나만
+.venv/bin/python -m pytest -q                             # 테스트
 ```
+
+### 데모 시나리오 바꾸기
+
+`scenarios/exam_day.yaml`을 열어 숫자·시각을 고치고 다시 실행하면 결과 카드와 `figures/demo_*.png` 그래프가 바뀝니다.
+
+```yaml
+profile: {age: 24, weight_kg: 70, smoker: false, sensitivity: normal}
+sleep:                  # 오래된 밤부터, 마지막 줄 = 어젯밤 ("잠든-깬")
+  - "00:30-07:30"
+  - "01:30-08:00"
+today:
+  now: "08:00"
+  bed: "23:00"          # 기상 시각보다 이르면 다음 날 새벽
+  already: []           # 예: - {time: "09:00", mg: 100} 또는 - {time: "09:00", sips: 8}
+  windows:              # 깨어 있기 / 졸면 안 됨 / 집중
+    - {kind: 졸면 안 됨, from: "14:00", to: "17:00"}
+beverage: coffee        # coffee / black_tea / {name: "아메리카노 톨", mg: 150, ml: 355}
+```
+
+| 예시 시나리오 | 엔진의 답 |
+| --- | --- |
+| `exam_day` 시험 날, 23시 취침 | 13:45 커피 13모금, 21:30부터 금지 |
+| `late_night` 과제 마감, 01시 취침, 오전에 이미 한 잔 | 18:15 7모금만 + "밤 1시간은 카페인으로 못 메움" 경고 |
+| `smoker_early_shift` 흡연자, 05:30 기상 운전 출근 | 06:00 · 12:15 두 번 (분해가 빨라 375mg) |
+| `pregnant_sensitive` 임신 후기, 카페인 민감 | 카페인 없이 (반감기 약 15시간이라 수면 기준을 지킬 수 없음) |
 
 ## 진행 상황
 
@@ -104,7 +129,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # 처음 �
 - [x] Step 1-3 — 카페인 효과
 - [x] Step 1-4 — 최적화 (섭취 플랜 · 컷오프)
 - [x] Step 1-5 — 개인 파라미터 · 모금 변환 · 지표 · 전체 실행기
-- [ ] Step 1-6 — 데모
+- [x] Step 1-6 — 데모 (시나리오 파일 → 결과 카드 + 그래프)
 - [ ] Step 2~ — 입력 화면, 알림, 리포트, 음료 DB, 피드백 개인화
 
 ## 주의

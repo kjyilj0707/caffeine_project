@@ -1,0 +1,22 @@
+# 임신 후기 · 카페인 민감 — 상한·반감기·허용 잔량이 모두 엄격해지는 경우
+name: "임신 후기 · 민감 (22시 30분 취침)"
+
+profile:
+  age: 32
+  weight_kg: 65
+  pregnancy_trimester: 3
+  sensitivity: sensitive
+
+sleep:
+  - "23:00-07:00"
+  - "23:30-06:30"
+  - "23:00-07:00"
+
+today:
+  now: "07:00"
+  bed: "22:30"
+  windows:
+    - {kind: 깨어 있기, from: "07:00", to: "22:30"}
+    - {kind: 집중, from: "10:00", to: "12:00"}
+
+beverage: black_tea

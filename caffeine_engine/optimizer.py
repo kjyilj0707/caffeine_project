@@ -232,6 +232,10 @@ def optimize(sleeps: Sequence[SleepEpisode], windows: Sequence[Window], bed_h: f
         while True:
             candidates = [(problem.cost(c), c) for c in _neighbors(problem, plan) if not problem.violations(c)]
             if not candidates:
+                if not plan:
+                    smallest = min(problem.doses_mg, default=0)
+                    warnings.append(f"수면 기준·상한을 지키면서 효과 있는 양({smallest:g}mg 이상)을 마실 수 있는"
+                                    " 시각이 없어요 → 오늘은 카페인 없이")
                 break
             cost, choice = min(candidates, key=lambda x: x[0])
             if cost >= best - 1e-9:

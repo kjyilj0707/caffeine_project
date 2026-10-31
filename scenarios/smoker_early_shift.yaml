@@ -1,0 +1,21 @@
+# 흡연자 · 아침형 · 이른 출근 — 분해가 빨라 더 마셔도 되는 경우
+name: "흡연자 이른 출근 (22시 취침)"
+
+profile:
+  age: 31
+  weight_kg: 80
+  smoker: true
+  chronotype: morning
+
+sleep:
+  - "22:30-05:30"
+  - "23:00-05:30"
+  - "23:30-05:30"
+
+today:
+  now: "05:30"
+  bed: "22:00"
+  windows:
+    - {kind: 깨어 있기, from: "05:30", to: "22:00"}
+    - {kind: 졸면 안 됨, from: "06:30", to: "07:30"}   # 운전 출근
+    - {kind: 집중, from: "13:00", to: "15:00"}

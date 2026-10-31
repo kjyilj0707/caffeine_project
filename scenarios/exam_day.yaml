@@ -1,0 +1,27 @@
+# 시험 날 — 이 파일의 숫자·시각을 고치고 demo.py를 다시 실행해 보세요
+name: "시험 날 (23시 취침)"
+
+profile:                 # 기본 정보
+  age: 24
+  weight_kg: 70
+  smoker: false
+  sensitivity: normal    # sensitive(민감) / normal / tolerant(둔감)
+  chronotype: neutral    # morning(아침형) / neutral / evening(저녁형)
+  # daily_cap_mg: 300    # 하루 최대량을 직접 정하려면 앞의 #을 지우기
+
+sleep:                   # 최근 수면 (오래된 밤부터, 마지막 줄 = 어젯밤) "잠든-깬"
+  - "00:30-07:30"
+  - "01:00-07:00"
+  - time: "01:30-08:00"
+    quality: 3           # 수면 질 1~5 (선택)
+
+today:
+  now: "08:00"           # 지금 시각 (이후 시각에만 추천)
+  bed: "23:00"           # 오늘 잘 시각
+  already: []            # 이미 마신 것. 예: - {time: "09:00", mg: 100} 또는 - {time: "09:00", sips: 8}
+  windows:               # 깨어 있기 / 졸면 안 됨 / 집중
+    - {kind: 깨어 있기, from: "08:00", to: "23:00"}
+    - {kind: 졸면 안 됨, from: "14:00", to: "17:00"}
+    - {kind: 집중, from: "15:00", to: "16:00"}
+
+beverage: coffee         # coffee / black_tea / {name: "아메리카노 톨", mg: 150, ml: 355}
