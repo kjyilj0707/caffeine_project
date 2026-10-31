@@ -5,9 +5,9 @@
 깨어 있어야 할 때는 졸리고, 자야 할 때는 카페인 때문에 잠이 안 오는 문제를 풉니다.
 감으로 마시는 대신, **수면 과학·약동학 논문의 숫자**로 계산합니다.
 
-![예시 하루: 각성 점수와 몸속 카페인](figures/step1-3_day_overview.png)
+![엔진 추천 플랜: 23시 취침](figures/step1-4_plan_bed23.png)
 
-*예시 하루: 최근 6~7시간 수면, 09:00 100mg · 13:15 75mg, 14~17시 시험, 01:00 취침.
+*엔진 추천 플랜 예시: 최근 6~7시간 수면, 14~17시 시험, 23:00 취침 → "13:45에 100mg, 21:30부터 금지".
 위는 각성 점수(점선 = 카페인 없을 때), 아래는 몸속 카페인.*
 
 ---
@@ -31,7 +31,7 @@ flowchart LR
 | ② 피로도 | 수면 압력 + 생체 리듬 + 오후 처짐 + 기상 직후 멍함 → 각성 점수(14 또렷 · 7 위험선) | Åkerstedt 2004, Van Dongen 2003 | ✅ `fatigue.py` |
 | ③ 체내 카페인 | 1구획 흡수·분해 모델, 여러 잔은 합산 | Gardiner 2023, Ramakrishnan 2016 | ✅ `pk.py` |
 | 카페인 효과 | 졸림 × g (100mg → 졸림 약 19%↓, 3~4시간 지속) | Ramakrishnan 2016 (2B-Alert) | ✅ `effect.py` |
-| ④ 최적화 | 졸림은 최대한 줄이고, 취침 잔량 ≤ 30mg · 수면 감소 < 20분 · 상한 지키기 | Vital-Lopez 2018, Gardiner 2023 | 🚧 다음 단계 |
+| ④ 최적화 | 졸림은 최대한 줄이고, 위험선 7 지키기 · 잠든 뒤 잔량 ≤ 30mg · 수면 감소 < 20분 · 상한 · 2시간 간격 | Vital-Lopez 2018, Gardiner 2023 | ✅ `optimizer.py` |
 | ⑤ 변환 | 커피 0.43mg/ml 등 → 모금 수 | Gardiner 2023 인용값 | 예정 |
 
 **핵심 숫자**
@@ -47,15 +47,18 @@ flowchart LR
 - 카페인은 수면 부족으로 생긴 졸림을 **20~30% 정도만** 줄인다 → 수면을 대신할 수 없다
 - 반감기 5시간이면 **하루 200mg만 돼도** 새벽 1시 취침을 지키기 빠듯하다
 - 피로도 모델은 1주 이상 이어지는 수면 부족을 과소평가한다 (Van Dongen 2003과 비교) → 테스트로 기록
+- 시험이 있으면 엔진은 **약 1시간 전**에 마시라고 한다 (효과 최고점이 마신 뒤 약 1시간)
+- 23시 취침이면 하루 카페인 여유는 **약 100mg**뿐이다 — 수면 기준(잠든 뒤 30mg)이 가장 강한 제약
+- 01시까지 깨어 있어야 하는데 밤에 졸리면, 카페인으로는 못 메운다 → 엔진이 '수면·휴식 필요'로 경고
 
 ## 폴더
 
 | 경로 | 내용 |
 | --- | --- |
 | `parameters.yaml` | 엔진의 모든 숫자 + 출처 + 확정/임시 상태 |
-| `caffeine_engine/` | 계산 엔진 (`pk.py` 체내 카페인 · `fatigue.py` 피로도 · `effect.py` 카페인 효과) |
-| `tests/` | 논문 결과를 재현하는지 검사 (31개) |
-| `scripts/` | 확인용 그래프 스크립트 |
+| `caffeine_engine/` | 계산 엔진 (`pk.py` 체내 카페인 · `fatigue.py` 피로도 · `effect.py` 카페인 효과 · `optimizer.py` 섭취 플랜) |
+| `tests/` | 논문 결과 재현 + 규칙 준수 검사 (43개) |
+| `scripts/` | 확인용 그래프 스크립트 (`daychart.py` 공통 그리기) |
 | `figures/` | 그래프 결과물 |
 | `papers/` | 논문 목록 (PDF는 저작권 때문에 로컬 전용) |
 
@@ -67,6 +70,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # 처음 �
 .venv/bin/python -m pytest -q                      # 테스트
 .venv/bin/python scripts/plot_body_caffeine.py     # 체내 카페인 그래프
 .venv/bin/python scripts/plot_day_overview.py      # 각성 점수 + 체내 카페인 그래프
+.venv/bin/python scripts/plot_plan.py              # 엔진 추천 플랜 그래프
 ```
 
 ## 진행 상황
@@ -75,7 +79,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # 처음 �
 - [x] Step 1-1 — 체내 카페인
 - [x] Step 1-2 — 피로도
 - [x] Step 1-3 — 카페인 효과
-- [ ] Step 1-4 — 최적화 (섭취 플랜 · 컷오프)
+- [x] Step 1-4 — 최적화 (섭취 플랜 · 컷오프)
 - [ ] Step 1-5 — 모금 변환 · 지표 10종
 - [ ] Step 1-6 — 데모
 - [ ] Step 2~ — 입력 화면, 알림, 리포트, 음료 DB, 피드백 개인화

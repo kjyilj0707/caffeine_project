@@ -136,10 +136,53 @@ fatigue:  # ② 피로도 (Åkerstedt 3-프로세스 모델, 1~21점)
     source: "설계값 (수면 질 1~5점 → 회복 속도 배수)"
     status: provisional
 
-targets:  # ④ 목표 구간별 목표 각성 점수
-  must_not_sleep: {value: 10, source: "설계값 (위험선 7 + 여유)", status: provisional}
-  peak_focus: {value: 13, source: "설계값 (14 = 매우 또렷)", status: provisional}
-  stay_awake: {value: 7, source: "Åkerstedt 2004 위험선", status: confirmed}
+targets:  # ④ 목표 방식 (1-3 결과로 재설계: 고정 점수 대신 '위험선 지키기 + 졸림 최대한 줄이기')
+  peak_focus:
+    value: 13
+    source: "그래프 표시용 참고선만. 카페인으로 메울 수 있는 졸림은 20~30%라 최적화 목표로는 쓰지 않음 (1-3)"
+    status: provisional
+
+optimizer:  # ④ 최적화 — 벌점 구조는 Vital-Lopez 2018 (졸림 면적 + 최악 졸림 + 안전), 우리 앱 항목 추가
+  window_weights:
+    value: {stay_awake: 1.0, must_not_sleep: 3.0, focus: 4.0}
+    source: "설계값 (구간이 겹치면 큰 값 사용)"
+    status: provisional
+  worst_point_weight:
+    value: 2.0
+    source: "설계값 (Vital-Lopez의 '최악 졸림' 항)"
+    status: provisional
+  danger_penalty_per_h:
+    value: 50.0
+    source: "설계값 (졸면 안 되는·깨어 있어야 하는 구간에서 위험선 7 아래 1시간당)"
+    status: provisional
+  mg_penalty:
+    value: 0.01
+    source: "설계값 (같은 효과면 덜 마시는 플랜 — Vital-Lopez: 최대 65% 절감)"
+    status: provisional
+  dose_options_mg:
+    value: [50, 75, 100, 125, 150, 175, 200]
+    source: "25mg 단위, 1회 최소 효과(McLellan 40mg) ~ 1회 상한(EFSA 200mg)"
+    status: confirmed
+  min_interval_h:
+    value: 2.0
+    source: "Vital-Lopez 2018 (잔 사이 최소 2시간)"
+    status: confirmed
+  time_step_h:
+    value: 0.25
+    source: "설계값 (15분 단위)"
+    status: provisional
+  max_new_doses:
+    value: 3
+    source: "설계값"
+    status: provisional
+  residual_window_h:
+    value: 2.0
+    source: "설계값: 취침 직전에 마시면 취침 시각엔 아직 흡수 전이라, 잠든 뒤 2시간 동안의 최대 잔량으로 검사"
+    status: provisional
+  cutoff_probe_mg:
+    value: 25
+    source: "설계서: '25mg만 더 마셔도 수면 기준을 어기는' 가장 이른 시각 = 컷오프"
+    status: provisional
 
 conversion:  # ⑤ mg → 음료·모금
   coffee_mg_per_ml:
