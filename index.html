@@ -10,14 +10,83 @@
   <style>
     body { margin: 0; background: #ffffff; }
     #loading { font-family: system-ui, sans-serif; color: #52514e; padding: 48px 16px; text-align: center; }
+    /* 로그인 바 (Step 4-2) */
+    #auth-bar { font-family: system-ui, sans-serif; font-size: 14px; color: #31333f; background: #f7f7f5;
+                border-bottom: 1px solid #e6e6e3; padding: 8px 16px; display: flex; flex-wrap: wrap;
+                gap: 8px; align-items: center; }
+    #auth-bar form { display: flex; gap: 6px; margin: 0; }
+    #auth-bar input { font: inherit; padding: 5px 8px; border: 1px solid #c9c9c4; border-radius: 6px; min-width: 0; }
+    #auth-bar button { font: inherit; padding: 5px 10px; border: 1px solid #c9c9c4; border-radius: 6px;
+                       background: #fff; cursor: pointer; }
+    #auth-msg { color: #52514e; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
+  <!-- 로그인 바: 로그인은 자바스크립트(supabase-js)가 하고, 결과를 브라우저 속 Python에 파일로 넘긴다 -->
+  <div id="auth-bar">
+    <span id="auth-status">☁️ 로그인 확인 중…</span>
+    <form id="auth-email-form" hidden>
+      <input id="auth-email" type="email" required placeholder="이메일" autocomplete="email" />
+      <button type="submit">로그인 링크 받기</button>
+    </form>
+    <form id="auth-code-form" hidden>
+      <input id="auth-code" inputmode="numeric" pattern="[0-9]{6,10}" placeholder="메일의 숫자 코드" autocomplete="one-time-code" />
+      <button type="submit">코드로 로그인</button>
+    </form>
+    <button id="auth-logout" hidden>로그아웃</button>
+    <span id="auth-msg"></span>
+  </div>
   <div id="root">
     <p id="loading">☕ 카페인 측정기를 불러오는 중이에요. 처음엔 10~20초 걸려요…</p>
   </div>
   <script type="module">
     import { mount } from "https://cdn.jsdelivr.net/npm/@stlite/browser@1.11.0/build/stlite.js";
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm";
+
+    // ── 로그인 (Step 4-2) ──
+    // 공개용 키라 저장소에 있어도 됨: 데이터 보호는 서버의 RLS 규칙(내 데이터는 나만)이 한다
+    const SUPABASE_URL = "https://arqruewigqgzbmlsgjad.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_d3_p7eyo_DVHwgFvXXMbqw_Z1Pngu2j";
+    const SESSION_FILE = ".auth_session.json";  // app/account.py의 SESSION_FILE과 같은 이름
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    const $ = (id) => document.getElementById(id);
+
+    const sessionData = (s) => JSON.stringify(s ? {
+      url: SUPABASE_URL, key: SUPABASE_KEY, user_id: s.user.id, email: s.user.email ?? "",
+      access_token: s.access_token, expires_at: s.expires_at,
+    } : {});
+
+    function showAuth(session) {
+      $("auth-status").textContent = session ? `☁️ ${session.user.email} 로그인됨` : "☁️ 로그인하면 기록을 저장할 수 있어요 (준비 중)";
+      $("auth-email-form").hidden = !!session;
+      $("auth-logout").hidden = !session;
+      if (session) { $("auth-code-form").hidden = true; $("auth-msg").textContent = ""; }
+    }
+
+    // 메일 링크로 돌아온 경우 주소에 담긴 로그인 정보를 여기서 처리한다
+    const { data: { session } } = await supabase.auth.getSession();
+    showAuth(session);
+
+    $("auth-email-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = $("auth-email").value.trim();
+      $("auth-msg").textContent = "보내는 중…";
+      const { error } = await supabase.auth.signInWithOtp({
+        email, options: { emailRedirectTo: location.origin + location.pathname },
+      });
+      if (error) { $("auth-msg").textContent = `⚠️ ${error.message}`; return; }
+      $("auth-msg").textContent = "📧 메일을 보냈어요. 메일의 링크를 누르거나, 숫자 코드가 있으면 입력하세요.";
+      $("auth-code-form").hidden = false;
+    });
+    $("auth-code-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const { error } = await supabase.auth.verifyOtp({
+        email: $("auth-email").value.trim(), token: $("auth-code").value.trim(), type: "email",
+      });
+      if (error) $("auth-msg").textContent = `⚠️ ${error.message}`;
+    });
+    $("auth-logout").addEventListener("click", () => supabase.auth.signOut());
 
     // 저장소의 파일을 그대로 가져와 브라우저 속 Python에 넣는다.
     // 파일을 추가하면 이 목록에도 추가할 것 (tests/test_pages.py가 빠진 파일을 잡아낸다)
@@ -26,6 +95,7 @@
       "app/forms.py",
       "app/charts.py",
       "app/ntfy.py",
+      "app/account.py",
       "caffeine_engine/__init__.py",
       "caffeine_engine/params.py",
       "caffeine_engine/timeutil.py",
@@ -46,15 +116,26 @@
       "scenarios/smoker_early_shift.yaml",
     ];
 
-    mount(
+    const app = mount(
       {
         requirements: ["pyyaml"],
         entrypoint: "app/streamlit_app.py",
-        files: Object.fromEntries(FILES.map((path) => [path, { url: path }])),
+        files: {
+          ...Object.fromEntries(FILES.map((path) => [path, { url: path }])),
+          [SESSION_FILE]: { data: sessionData(session) },
+        },
         streamlitConfig: { "client.toolbarMode": "viewer" },  // 개발자용 Deploy 버튼 숨김
       },
       document.getElementById("root"),
     );
+
+    // 로그인·로그아웃은 화면을 새로 열어 Python이 처음부터 새 상태로 시작하게 하고,
+    // 1시간마다 오는 열쇠 갱신은 파일만 다시 써준다 (Python은 다음 화면 갱신 때 새 열쇠를 읽음)
+    supabase.auth.onAuthStateChange((event, s) => {
+      if (event === "SIGNED_IN" && !session) location.reload();
+      else if (event === "SIGNED_OUT") location.reload();
+      else if (event === "TOKEN_REFRESHED") app.writeFile(SESSION_FILE, sessionData(s));
+    });
   </script>
 </body>
 </html>

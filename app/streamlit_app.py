@@ -1,4 +1,4 @@
-"""☕ 카페인 측정기 — 입력 화면 (Step 2) + 알림 예약 (Step 3)
+"""☕ 카페인 측정기 — 입력 화면 (Step 2) + 알림 예약 (Step 3) + 로그인 상태 (Step 4)
 
 실행: .venv/bin/streamlit run app/streamlit_app.py
 왼쪽에서 ① 기본 정보 ② 오늘 입력 ③ 목표를 넣으면 오른쪽에 플랜·지표·그래프가 바로 나오고,
@@ -15,6 +15,7 @@ import pandas as pd
 import streamlit as st
 import yaml
 
+from account import current_session, rest
 from charts import build_charts, build_frames
 from ntfy import publish, valid_topic
 from forms import (CHRONOTYPE_LABEL, KIND_LABELS, SENSITIVITY_LABEL, intake_list_to_rows, intake_rows_to_list,
@@ -46,6 +47,20 @@ with st.sidebar:
         st.session_state.version += 1
     st.caption("입력을 바꾸면 오른쪽 결과가 바로 다시 계산돼요.")
     st.caption("※ 의학적 조언이 아니에요. 평균적인 성인 기준 예측입니다.")
+
+    # ── 로그인 상태 (로그인은 화면 맨 위 바에서 — index.html) ──
+    st.divider()
+    session = current_session()
+    if session is None:
+        st.caption("☁️ 로그인 안 됨 — 화면 맨 위에서 이메일로 로그인할 수 있어요.")
+    else:
+        st.caption(f"☁️ {session.email} 로그인됨")
+        if st.button("서버 연결 확인", width="stretch"):
+            try:
+                rows = rest(session, "GET", "profiles?select=user_id")
+                st.success(f"서버 연결 OK — 내 기본 정보 {len(rows)}건 (다른 사람 것은 안 보여요)")
+            except Exception as e:  # 화면에 원인을 그대로 보여줘 테스트 때 바로 알 수 있게
+                st.error(f"서버 연결 실패: {e}")
 
 base, v = st.session_state.base, st.session_state.version
 prof, today = base.get("profile", {}), base.get("today", {})
