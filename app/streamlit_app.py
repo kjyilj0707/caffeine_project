@@ -253,6 +253,8 @@ with right:
     elif topic:
         if st.query_params.get("ntfy") != topic:
             st.query_params["ntfy"] = topic
+        # 링크 복사 중 이름이 잘리는 실수가 실제로 있었음 → 끝자리를 보여줘 ntfy 앱과 비교하게
+        st.caption(f"채널 끝 4자리: **…{topic[-4:]}** ({len(topic)}자) — 핸드폰 ntfy 앱의 채널 이름과 같은지 확인하세요")
         notes = plan_notifications(plan, result.servings, sc.bed_h) if plan else []
         items = schedule(notes, now_h=sc.now_h)
         if items:

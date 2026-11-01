@@ -93,6 +93,7 @@ def test_notification_section_schedules_with_fake_transport(monkeypatch):
     at, sent = _app_with_fake_ntfy(monkeypatch)
     assert not at.exception
     assert at.text_input(key="ntfy_topic").value == "caffeine-test-topic123"
+    assert any("…c123" in c.value and "22자" in c.value for c in at.caption)  # 끝자리로 잘림 확인
     # 예시의 '지금 시각'(08:00)이 실제와 다르면 일부는 '지난 시각'으로 건너뛸 수 있으니 버튼 상태만 맞는지 본다
     reserve = next(b for b in at.button if b.label.startswith("오늘 알림 예약"))
     if not reserve.disabled:
