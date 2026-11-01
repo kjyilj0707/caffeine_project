@@ -256,9 +256,11 @@ with right:
         notes = plan_notifications(plan, result.servings, sc.bed_h) if plan else []
         items = schedule(notes, now_h=sc.now_h)
         if items:
+            # 칸이 좁으면 마지막 열이 잘리므로 '상태'를 앞쪽에 두고 상세 내용은 알림 칸 아래 줄로
             st.dataframe(pd.DataFrame([{
-                "시각": i.at.strftime("%m/%d %H:%M"), "알림": i.notification.title,
-                "내용": i.notification.message, "상태": "보낼 예정" if i.send else f"건너뜀 · {i.reason}",
+                "시각": i.at.strftime("%H:%M"),
+                "상태": "✅ 보낼 예정" if i.send else f"⏭️ {i.reason}",
+                "알림": f"{i.notification.title} — {i.notification.message}",
             } for i in items]), hide_index=True, width="stretch")
         else:
             st.caption("예약할 알림이 없어요.")
