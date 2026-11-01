@@ -11,9 +11,13 @@
     body { margin: 0; background: #ffffff; }
     #loading { font-family: system-ui, sans-serif; color: #52514e; padding: 48px 16px; text-align: center; }
     /* 로그인 바 (Step 4-2) */
-    #auth-bar { font-family: system-ui, sans-serif; font-size: 14px; color: #31333f; background: #f7f7f5;
-                border-bottom: 1px solid #e6e6e3; padding: 8px 16px; display: flex; flex-wrap: wrap;
+    /* Streamlit 화면은 자기 상자를 꽉 채우므로(position: absolute), 바를 맨 위에 고정하고
+       앱 상자(#root)는 바 높이만큼 아래에서 시작하게 한다 (높이는 아래 자바스크립트가 맞춤) */
+    #auth-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; box-sizing: border-box;
+                font-family: system-ui, sans-serif; font-size: 14px; color: #31333f; background: #f0f0ec;
+                border-bottom: 1px solid #d9d9d4; padding: 8px 16px; display: flex; flex-wrap: wrap;
                 gap: 8px; align-items: center; }
+    #root { position: fixed; top: var(--auth-bar-h, 46px); left: 0; right: 0; bottom: 0; overflow: auto; }
     #auth-bar form { display: flex; gap: 6px; margin: 0; }
     #auth-bar input { font: inherit; padding: 5px 8px; border: 1px solid #c9c9c4; border-radius: 6px; min-width: 0; }
     #auth-bar button { font: inherit; padding: 5px 10px; border: 1px solid #c9c9c4; border-radius: 6px;
@@ -51,6 +55,9 @@
     const SESSION_FILE = ".auth_session.json";  // app/account.py의 SESSION_FILE과 같은 이름
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
     const $ = (id) => document.getElementById(id);
+    // 바가 좁은 화면에서 두 줄이 되어도 앱이 바에 가리지 않게
+    new ResizeObserver(() => document.documentElement.style.setProperty(
+      "--auth-bar-h", `${$("auth-bar").offsetHeight}px`)).observe($("auth-bar"));
 
     const sessionData = (s) => JSON.stringify(s ? {
       url: SUPABASE_URL, key: SUPABASE_KEY, user_id: s.user.id, email: s.user.email ?? "",
