@@ -98,3 +98,21 @@ def schedule(notifications: Sequence[Notification], now_h: float,
         else:
             out.append(Scheduled(n, at, True))
     return out
+
+
+def schedule_test(minutes: int = 1, real_now: Optional[datetime] = None) -> Scheduled:
+    """테스트 알림은 입력한 '지금 시각'이 아니라 실제 현재 시각 + minutes분에 보낸다."""
+    tz = local_tz()
+    real_now = (real_now or datetime.now(tz)).astimezone(tz)
+    at = (real_now + timedelta(minutes=minutes)).replace(second=0, microsecond=0)
+    if (at - real_now).total_seconds() < _n("min_lead_s"):
+        at += timedelta(minutes=1)
+    hours = at.hour + at.minute / 60
+    return Scheduled(make_test_notification(hours - minutes / 60, minutes), at, True)
+
+
+def current_time_h(real_now: Optional[datetime] = None) -> float:
+    """실제 현재 한국 시각을 15분 단위로 내림한 값 (화면의 '실제 현재 시각으로' 버튼용)."""
+    tz = local_tz()
+    real_now = (real_now or datetime.now(tz)).astimezone(tz)
+    return real_now.hour + (real_now.minute // 15) * 15 / 60

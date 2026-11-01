@@ -76,3 +76,48 @@ def test_pages_index_lists_every_runtime_file():
     needed |= {str(p.relative_to(ROOT)) for p in (ROOT / "scenarios").glob("*.yaml")}
     assert needed <= listed, f"index.html에 빠진 파일: {needed - listed}"
     assert (ROOT / ".nojekyll").exists()  # 없으면 __init__.py 같은 _로 시작하는 파일이 배포에서 빠짐
+
+
+def _app_with_fake_ntfy(monkeypatch, topic="caffeine-test-topic123"):
+    """실제 전송 대신 보낸 내용을 기록하는 가짜 publish로 화면을 띄운다."""
+    import ntfy
+    from streamlit.testing.v1 import AppTest
+    sent = []
+    monkeypatch.setattr(ntfy, "publish", lambda t, item, **kw: sent.append((t, item)) or {"id": "fake"})
+    at = AppTest.from_file(str(ROOT / "app" / "streamlit_app.py"), default_timeout=60)
+    at.query_params["ntfy"] = topic
+    return at.run(), sent
+
+
+def test_notification_section_schedules_with_fake_transport(monkeypatch):
+    at, sent = _app_with_fake_ntfy(monkeypatch)
+    assert not at.exception
+    assert at.text_input(key="ntfy_topic").value == "caffeine-test-topic123"
+    # 예시의 '지금 시각'(08:00)이 실제와 다르면 일부는 '지난 시각'으로 건너뛸 수 있으니 버튼 상태만 맞는지 본다
+    reserve = next(b for b in at.button if b.label.startswith("오늘 알림 예약"))
+    if not reserve.disabled:
+        reserve.click().run()
+        assert not at.exception
+        assert sent and all(t == "caffeine-test-topic123" for t, _ in sent)
+        n = len(sent)
+        next(b for b in at.button if b.label.startswith("오늘 알림 예약")).click().run()
+        assert len(sent) == n  # 같은 알림은 다시 보내지 않음 (중복 방지)
+        assert any("이미 예약" in i.value for i in at.info)
+
+
+def test_test_notification_button_and_bad_topic(monkeypatch):
+    at, sent = _app_with_fake_ntfy(monkeypatch)
+    next(b for b in at.button if b.label == "1분 뒤 테스트 알림").click().run()
+    assert not at.exception
+    assert len(sent) == 1 and sent[0][1].notification.kind == "test"
+    at.text_input(key="ntfy_topic").set_value("한글 채널").run()
+    assert any("영문" in e.value for e in at.error)
+
+
+def test_real_now_button_sets_current_time(monkeypatch):
+    from caffeine_engine.notify import current_time_h
+    from caffeine_engine.timeutil import h_to_hhmm
+    at, _ = _app_with_fake_ntfy(monkeypatch)
+    next(b for b in at.button if b.label == "🕒 실제 현재 시각으로").click().run()
+    assert not at.exception
+    assert at.time_input[0].value.strftime("%H:%M") == h_to_hhmm(current_time_h())

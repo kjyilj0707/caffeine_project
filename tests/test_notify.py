@@ -97,3 +97,11 @@ def test_topic_rules(topic, ok):
 
 def test_kst_offset():
     assert local_tz().utcoffset(None) == timedelta(hours=9)
+
+
+def test_schedule_test_uses_real_clock():
+    from caffeine_engine.notify import current_time_h, schedule_test
+    item = schedule_test(1, real_now=kst(2026, 11, 1, 14, 26, ))
+    assert item.send and item.at == kst(2026, 11, 1, 14, 27)
+    assert item.notification.kind == "test"
+    assert current_time_h(kst(2026, 11, 1, 14, 29)) == 14.25

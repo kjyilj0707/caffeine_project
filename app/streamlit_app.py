@@ -1,10 +1,10 @@
-"""☕ 카페인 측정기 — 입력 화면 MVP (Step 2)
+"""☕ 카페인 측정기 — 입력 화면 (Step 2) + 알림 예약 (Step 3)
 
 실행: .venv/bin/streamlit run app/streamlit_app.py
-왼쪽에서 ① 기본 정보 ② 오늘 입력 ③ 목표를 넣으면 오른쪽에 플랜·지표·그래프가 바로 나온다.
+왼쪽에서 ① 기본 정보 ② 오늘 입력 ③ 목표를 넣으면 오른쪽에 플랜·지표·그래프가 바로 나오고,
+아래 「🔔 알림 예약」에서 ntfy 채널로 ☕ 마셔 / ⛔ 금지 알림을 핸드폰에 예약한다.
 """
 import sys
-from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -16,11 +16,13 @@ import streamlit as st
 import yaml
 
 from charts import build_charts, build_frames
+from ntfy import publish, valid_topic
 from forms import (CHRONOTYPE_LABEL, KIND_LABELS, SENSITIVITY_LABEL, intake_list_to_rows, intake_rows_to_list,
                    sensitivity_from_survey, sleep_list_to_rows, sleep_rows_to_list, to_time, window_list_to_rows,
                    window_rows_to_list)
 
 from caffeine_engine import params
+from caffeine_engine.notify import current_time_h, plan_notifications, schedule, schedule_test
 from caffeine_engine.pipeline import format_card, run_day
 from caffeine_engine.scenario import from_dict
 from caffeine_engine.timeutil import h_to_hhmm
@@ -144,8 +146,16 @@ with left:
 
     with tab_goal:
         g1, g2 = st.columns(2)
-        now = g1.time_input("지금 시각", to_time(today.get("now", datetime.now().strftime("%H:%M"))),
-                            step=900, key=key("now"))
+        now_key = key("now")
+        if now_key not in st.session_state:  # 기본값은 세션 상태로 (아래 버튼이 바꿀 수 있게)
+            st.session_state[now_key] = to_time(today.get("now") or h_to_hhmm(current_time_h()))
+
+        def use_real_now():
+            st.session_state[now_key] = to_time(h_to_hhmm(current_time_h()))
+
+        now = g1.time_input("지금 시각", step=900, key=now_key)
+        g1.button("🕒 실제 현재 시각으로", on_click=use_real_now, key=key("now_btn"),
+                  help="예시의 '지금 시각'이 실제와 다르면, 이미 지난 시각의 알림은 예약되지 않아요")
         bed = g2.time_input("오늘 잘 시각", to_time(today.get("bed", "23:00")), step=900, key=key("bed"))
         st.markdown("**시간대** — 깨어 있기 / 졸면 안 됨 / 집중")
         windows_df = st.data_editor(
@@ -227,6 +237,62 @@ with right:
     st.altair_chart(bottom_chart)
     st.caption("그래프에 마우스를 올리면 그 시각의 값을 볼 수 있어요. "
                "회색 띠 = 졸면 안 됨·집중 시간대, 점선 = 취침·금지 시각")
+
+    st.divider()
+    st.subheader("🔔 알림 예약")
+    topic = st.text_input(
+        "ntfy 알림 채널 이름", value=st.query_params.get("ntfy", ""), type="password", key="ntfy_topic",
+        help="핸드폰 ntfy 앱에서 구독한 채널 이름. 입력하면 주소창 링크에 들어가니, 그 주소를 즐겨찾기하면 다음부터 자동 입력돼요")
+    with st.expander("처음이라면: 핸드폰 알림 설정 방법"):
+        st.markdown(
+            "1. 앱스토어·플레이스토어에서 **ntfy** 설치 → 알림 **허용**\n"
+            "2. 앱의 **＋** → Subscribe to topic → 채널 이름 입력 (영문·숫자·-·_, 남이 못 맞힐 만큼 길게)\n"
+            "3. 같은 이름을 위 칸에 넣고 **「1분 뒤 테스트 알림」**으로 확인")
+    if topic and not valid_topic(topic):
+        st.error("채널 이름은 영문·숫자·-·_ 로 64자 이하여야 해요.")
+    elif topic:
+        if st.query_params.get("ntfy") != topic:
+            st.query_params["ntfy"] = topic
+        notes = plan_notifications(plan, result.servings, sc.bed_h) if plan else []
+        items = schedule(notes, now_h=sc.now_h)
+        if items:
+            st.dataframe(pd.DataFrame([{
+                "시각": i.at.strftime("%m/%d %H:%M"), "알림": i.notification.title,
+                "내용": i.notification.message, "상태": "보낼 예정" if i.send else f"건너뜀 · {i.reason}",
+            } for i in items]), hide_index=True, width="stretch")
+        else:
+            st.caption("예약할 알림이 없어요.")
+        to_send = [i for i in items if i.send]
+        b1, b2 = st.columns(2)
+        sent = st.session_state.setdefault("ntfy_sent", set())
+        if b1.button(f"오늘 알림 예약 ({len(to_send)}개)", type="primary", disabled=not to_send,
+                     width="stretch"):
+            batch_key = (topic, tuple((i.notification.title, i.at.isoformat()) for i in to_send))
+            if batch_key in sent:
+                st.info("같은 알림을 이미 예약했어요. (중복 방지)")
+            else:
+                errors = []
+                for i in to_send:
+                    try:
+                        publish(topic, i)
+                    except Exception as e:  # 인터넷·서버 오류를 화면에 보여준다
+                        errors.append(f"{i.notification.title}: {e}")
+                if errors:
+                    st.error("일부 알림을 예약하지 못했어요.\n\n" + "\n\n".join(errors))
+                else:
+                    sent.add(batch_key)
+                    st.success(f"{len(to_send)}개 예약했어요. 그 시각에 핸드폰으로 알림이 와요 (브라우저를 닫아도 돼요).")
+        if b2.button("1분 뒤 테스트 알림", width="stretch"):
+            test = schedule_test(1)
+            try:
+                publish(topic, test)
+                st.success(f"{test.at.strftime('%H:%M')}에 테스트 알림이 와요.")
+            except Exception as e:
+                st.error(f"테스트 알림을 보내지 못했어요: {e}")
+        st.caption("※ 플랜을 바꿔 다시 예약해도 이전 예약은 취소되지 않아 알림이 중복될 수 있어요. "
+                   "채널 이름은 어디에도 저장되지 않지만, 이름을 아는 사람은 알림 내용을 볼 수 있어요.")
+    else:
+        st.caption("채널 이름을 넣으면 ☕ 마실 시각과 ⛔ 금지 시각에 핸드폰 알림을 예약할 수 있어요.")
 
     with st.expander("텍스트 카드 · 개인 설정값"):
         st.code(format_card(result), language=None)
