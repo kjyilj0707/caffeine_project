@@ -64,6 +64,12 @@ def _parse_beverage(spec) -> Beverage:
 
 def load(path) -> Scenario:
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    data.setdefault("name", Path(path).stem)
+    return from_dict(data)
+
+
+def from_dict(data: dict) -> Scenario:
+    """시나리오 내용(dict) → 엔진 입력. 입력 화면도 이 형식으로 만들어 넘긴다."""
     sleeps = _parse_sleeps(data["sleep"])
     wake = sleeps[-1].end_h
     today = data["today"]
@@ -82,7 +88,7 @@ def load(path) -> Scenario:
         already.append(Dose(_today(a["time"], wake), mg))
 
     return Scenario(
-        name=data.get("name", Path(path).stem),
+        name=data.get("name", "오늘"),
         profile=Profile(**data.get("profile", {})),
         sleeps=sleeps,
         windows=windows,

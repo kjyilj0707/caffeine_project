@@ -2,6 +2,8 @@
 
 > 내 몸 상태와 오늘 일정을 넣으면 **언제 · 무엇을 · 얼마나** 마시고 **언제부터 끊을지** 알려주는 개인 맞춤 카페인 스케줄러
 
+**▶ 웹에서 바로 써보기: https://kjyilj0707.github.io/caffeine_project/** (처음 열 때 10~20초 로딩)
+
 깨어 있어야 할 때는 졸리고, 자야 할 때는 카페인 때문에 잠이 안 오는 문제를 풉니다.
 감으로 마시는 대신, **수면 과학·약동학 논문의 숫자**로 계산합니다.
 
@@ -80,7 +82,9 @@ print(format_card(result))
 | --- | --- |
 | `parameters.yaml` | 엔진의 모든 숫자 + 출처 + 확정/임시 상태 |
 | `caffeine_engine/` | 계산 엔진 — `profile.py` ① · `fatigue.py` ② · `pk.py` ③ · `effect.py` 카페인 효과 · `optimizer.py` ④ · `convert.py` ⑤ · `metrics.py` 지표 · `pipeline.py` 전체 실행 + 결과 카드 · `scenario.py` 시나리오 파일 읽기 |
-| `tests/` | 논문 결과 재현 + 규칙 준수 검사 (69개) |
+| `tests/` | 논문 결과 재현 + 규칙 준수 + 화면 검사 (74개) |
+| `app/` | **입력 화면** (Streamlit) — `streamlit_app.py` 화면 · `forms.py` 입력 변환 · `charts.py` 인터랙티브 그래프 |
+| `index.html` | GitHub Pages용 — stlite로 브라우저 안에서 Python을 돌려 `app/`을 서버 없이 실행 |
 | `scenarios/` | **데모 입력 파일** — 고쳐서 다시 실행하면 결과가 바뀜 |
 | `scripts/` | `demo.py` 데모 · 확인용 그래프 스크립트 (`daychart.py` 공통 그리기) |
 | `figures/` | 그래프 결과물 |
@@ -91,6 +95,7 @@ print(format_card(result))
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # 처음 한 번
 
+.venv/bin/streamlit run app/streamlit_app.py             # 입력 화면 (브라우저가 열림)
 .venv/bin/python scripts/demo.py                          # 데모: scenarios/ 시나리오 전부
 .venv/bin/python scripts/demo.py scenarios/exam_day.yaml  # 시나리오 하나만
 .venv/bin/python -m pytest -q                             # 테스트
@@ -130,7 +135,8 @@ beverage: coffee        # coffee / black_tea / {name: "아메리카노 톨", mg:
 - [x] Step 1-4 — 최적화 (섭취 플랜 · 컷오프)
 - [x] Step 1-5 — 개인 파라미터 · 모금 변환 · 지표 · 전체 실행기
 - [x] Step 1-6 — 데모 (시나리오 파일 → 결과 카드 + 그래프)
-- [ ] Step 2~ — 입력 화면, 알림, 리포트, 음료 DB, 피드백 개인화
+- [x] Step 2 — 입력 화면 MVP (Streamlit, GitHub Pages 배포)
+- [ ] Step 3~ — 알림, 기록·리포트, 음료 DB, 피드백 개인화
 
 ## 주의
 
