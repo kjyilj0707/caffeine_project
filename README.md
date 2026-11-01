@@ -81,9 +81,9 @@ print(format_card(result))
 | 경로 | 내용 |
 | --- | --- |
 | `parameters.yaml` | 엔진의 모든 숫자 + 출처 + 확정/임시 상태 |
-| `caffeine_engine/` | 계산 엔진 — `profile.py` ① · `fatigue.py` ② · `pk.py` ③ · `effect.py` 카페인 효과 · `optimizer.py` ④ · `convert.py` ⑤ · `metrics.py` 지표 · `pipeline.py` 전체 실행 + 결과 카드 · `scenario.py` 시나리오 파일 읽기 |
-| `tests/` | 논문 결과 재현 + 규칙 준수 + 화면 검사 (74개) |
-| `app/` | **입력 화면** (Streamlit) — `streamlit_app.py` 화면 · `forms.py` 입력 변환 · `charts.py` 인터랙티브 그래프 |
+| `caffeine_engine/` | 계산 엔진 — `profile.py` ① · `fatigue.py` ② · `pk.py` ③ · `effect.py` 카페인 효과 · `optimizer.py` ④ · `convert.py` ⑤ · `metrics.py` 지표 · `pipeline.py` 전체 실행 + 결과 카드 · `scenario.py` 시나리오 파일 읽기 · `notify.py` 플랜 → 예약 알림 |
+| `tests/` | 논문 결과 재현 + 규칙 준수 + 화면 + 알림 검사 (91개) |
+| `app/` | **입력 화면** (Streamlit) — `streamlit_app.py` 화면 · `forms.py` 입력 변환 · `charts.py` 인터랙티브 그래프 · `ntfy.py` 알림 전송 |
 | `index.html` | GitHub Pages용 — stlite로 브라우저 안에서 Python을 돌려 `app/`을 서버 없이 실행 |
 | `scenarios/` | **데모 입력 파일** — 고쳐서 다시 실행하면 결과가 바뀜 |
 | `scripts/` | `demo.py` 데모 · 확인용 그래프 스크립트 (`daychart.py` 공통 그리기) |
@@ -136,10 +136,10 @@ beverage: coffee        # coffee / black_tea / {name: "아메리카노 톨", mg:
 - [x] Step 1-5 — 개인 파라미터 · 모금 변환 · 지표 · 전체 실행기
 - [x] Step 1-6 — 데모 (시나리오 파일 → 결과 카드 + 그래프)
 - [x] Step 2 — 입력 화면 MVP (Streamlit, GitHub Pages 배포)
-- [ ] Step 3 — 알림 (마셔 / 금지 / 상한 경고) — **방식 확정: ntfy 예약 푸시** (아래)
+- [x] Step 3 — 알림 (☕ 마셔 / ⛔ 금지 / 상한 경고) — ntfy 예약 푸시, 핸드폰 수신 확인
 - [ ] Step 4~ — 기록·리포트, 음료 DB, 피드백 개인화
 
-### Step 3 알림 방식 테스트 (2026-11-01, 핸드폰)
+### Step 3 알림 — 방식 테스트 (2026-11-01, 핸드폰)
 
 | 방법 | 결과 | 비고 |
 | --- | --- | --- |
@@ -147,8 +147,17 @@ beverage: coffee        # coffee / black_tea / {name: "아메리카노 톨", mg:
 | ntfy 즉시 푸시 | ✅ | 무료 앱 [ntfy](https://ntfy.sh) + 비밀 채널 구독 |
 | **ntfy 예약 푸시 (3분 뒤)** | ✅ 앱을 닫아도 도착 | 웹앱이 '13:45에 보내기'를 예약 → 서버 없이 가능 (최대 3일 뒤) |
 
-계획: 화면에 알림 채널 입력칸 + 「오늘 알림 예약」(☕ 마셔 / ⛔ 금지) + 「1분 뒤 테스트」 + 상한 경고.
-채널 이름은 저장소에 저장하지 않는다 (이름을 아는 사람은 알림을 볼 수 있음).
+### 알림 쓰는 법
+
+1. 핸드폰에 [ntfy](https://ntfy.sh) 앱 설치 → 알림 허용 → **＋** → 채널 이름 구독 (영문·숫자·-·_, 남이 못 맞힐 만큼 길게)
+2. 웹 화면 맨 아래 「🔔 알림 예약」에 같은 채널 이름 입력 → **채널 끝 4자리**가 ntfy 앱과 같은지 확인
+3. 「1분 뒤 테스트 알림」으로 확인 → 「오늘 알림 예약」 (☕ 마실 시각마다, ⛔ 절대 컷오프에 1개씩)
+4. 입력하면 주소창 링크에 채널이 들어가니 그 주소를 즐겨찾기하면 다음부터 자동 입력
+
+- 예약은 ntfy 서버가 보내므로 **브라우저를 닫아도** 알림이 온다 (최대 3일 뒤까지)
+- 시각은 한국 시간(UTC+9) 기준. 이미 지난 알림은 표에 '건너뜀'으로 표시
+- 한계: 플랜을 바꿔 다시 예약해도 이전 예약은 취소되지 않음 / 채널 이름을 아는 사람은 알림을 볼 수 있음
+- 채널 이름은 저장소·파일 어디에도 저장하지 않는다
 
 ## 주의
 
