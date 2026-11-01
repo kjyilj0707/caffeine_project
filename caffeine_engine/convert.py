@@ -4,7 +4,10 @@
 (커피 1모금 ≈ 17.5ml × 0.428mg/ml ≈ 7.5mg)
 """
 from dataclasses import dataclass
-from typing import Optional
+from pathlib import Path
+from typing import List, Optional
+
+import yaml
 
 from . import params
 
@@ -56,3 +59,45 @@ def from_sips(sips: float, beverage: Beverage, sip_ml: Optional[float] = None) -
 
 def from_ml(ml: float, beverage: Beverage) -> float:
     return ml * beverage.mg_per_ml
+
+
+# ── 음료 카페인 DB (beverages.yaml, 조사일 2026-11-01) ──
+BEVERAGES_PATH = Path(__file__).resolve().parent.parent / "beverages.yaml"
+_FIELDS = ("brand", "menu", "temp", "size", "ml", "mg", "source_type", "source", "note")
+
+
+@dataclass(frozen=True)
+class DrinkEntry:
+    brand: str
+    menu: str
+    temp: Optional[str]
+    size: str
+    ml: Optional[float]
+    mg: float
+    source_type: str   # 공식 / 2차 / 공공 / 학술
+    source_url: str
+    note: str
+
+    @property
+    def label(self) -> str:
+        temp = f" {self.temp}" if self.temp else ""
+        ml = f" {self.ml:g}ml" if self.ml else ""
+        return f"{self.brand} {self.menu}{temp} ({self.size}{ml})"
+
+    def beverage(self) -> Optional[Beverage]:
+        """모금 변환용 Beverage. 용량을 모르면 None (그때는 '1잔' 단위로만 쓴다)."""
+        return Beverage(self.label, self.mg / self.ml) if self.ml else None
+
+
+def load_beverage_db(path: Path = BEVERAGES_PATH) -> List[DrinkEntry]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    sources = data["sources"]
+    out = []
+    for row in data["drinks"]:
+        rec = dict(zip(_FIELDS, row))
+        key, _, detail = str(rec.pop("source")).partition(" ")
+        rec["source_url"] = sources[key] + detail
+        rec["ml"] = float(rec["ml"]) if rec["ml"] is not None else None
+        rec["mg"] = float(rec["mg"])
+        out.append(DrinkEntry(**rec))
+    return out

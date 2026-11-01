@@ -1,0 +1,171 @@
+# 음료 카페인 DB (조사일 2026-11-01)
+# 출처: 공식 = 브랜드 공식 사이트/공지 · 2차 = 다나와 제품 스펙, 블로그(브랜드 출처 명시) 등
+#       공공 = 식약처·소비자원 조사 · 학술 = 논문
+# ml: 컵·캔 용량 (아이스는 얼음 포함 컵 용량). 모르면 null → 모금 변환은 못 하고 '1잔' 단위로만 사용
+# 매장·원두·추출 상태에 따라 실제 값은 달라질 수 있음. 노션 「음료 카페인 DB」와 같은 내용.
+
+sources:
+  starbucks: "https://www.starbucks.co.kr/menu/drink_list.do"
+  hollys: "https://www.hollys.co.kr/menu/espresso.do"
+  hollys_sig: "https://www.hollys.co.kr/menu/signature.do"
+  coffeebean: "https://www.coffeebeankorea.com/menu/list.asp?category=13"
+  coffeebean_cb: "https://www.coffeebeankorea.com/menu/list.asp?category=14"
+  coffeebean_tea: "https://www.coffeebeankorea.com/menu/list.asp?category=17"
+  coffee4m_am: "https://coffee4m.com/아메리카노-카페인-함량-2022년/"
+  coffee4m_decaf: "https://coffee4m.com/커피전문점-디카페인-커피-2022/"
+  mega: "https://www.mega-mgccoffee.com/menu/menu.php?menu_category1=1&menu_category2=1"
+  compose: "https://composecoffee.com/menu"
+  paik: "https://paikdabang.com/menu/menu_coffee/"
+  paik_drink: "https://paikdabang.com/menu/menu_drink/"
+  ediya: "https://www.ediya.com/contents/drink.html"
+  venti: "https://www.theventi.co.kr/new2022/news/notice.html?bmain=view&uid=46"
+  danawa: "https://prod.danawa.com/info/?pcode="
+  kfda2007: "https://www.medicaltimes.com/Mobile/News/NewsView.html?ID=44358"
+  kca2014_mix: "https://www.etoday.co.kr/news/view/946642"
+  kca2022_rtd: "https://www.dailian.co.kr/news/view/1145936/"
+  tea2001: "https://koreascience.or.kr/article/JAKO200111920994522.page"
+  coke: "https://www.coca-colacompany.com/about-us/faq/what-is-caffeine"
+
+# 필드: [브랜드, 메뉴, 온도, 사이즈, ml, mg, 출처유형, 출처키(+상세), 메모]
+drinks:
+  # ── 스타벅스 ──
+  - [스타벅스, 카페 아메리카노, HOT, Tall, 355, 150, 공식, starbucks, ""]
+  - [스타벅스, 아이스 카페 아메리카노, ICE, Tall, 355, 150, 공식, starbucks, ""]
+  - [스타벅스, 카페 아메리카노, null, Short, 237, 75, 2차, coffee4m_am, "샷당 75mg 배수와 일치"]
+  - [스타벅스, 카페 아메리카노, null, Grande, 473, 225, 2차, coffee4m_am, ""]
+  - [스타벅스, 카페 아메리카노, null, Venti, 591, 300, 2차, coffee4m_am, ""]
+  - [스타벅스, 카페 라떼, null, Tall, 355, 75, 공식, starbucks, "Tall 라떼는 1샷 → 아메리카노(2샷)의 절반"]
+  - [스타벅스, 콜드 브루, ICE, Tall, 355, 155, 공식, starbucks, ""]
+  - [스타벅스, 콜드 브루 (591ml 품목), ICE, 20oz, 591, 360, 공식, starbucks, ""]
+  - [스타벅스, 에스프레소, HOT, Solo, 22, 75, 공식, starbucks, "샷 추가 1개 ≈ 75mg"]
+  - [스타벅스, 디카페인 아메리카노, null, Tall, null, 10, 2차, coffee4m_decaf, "Short 5 / Grande 15 / Venti 20"]
+  - [스타벅스, 제주 말차 라떼, null, Tall, 355, 80, 공식, starbucks, ""]
+  - [스타벅스, 클래식 밀크 티, HOT, 기본, null, 170, 공식, starbucks, "아메리카노보다 많음"]
+  - [스타벅스, 클래식 밀크 티, ICE, 기본, null, 65, 공식, starbucks, ""]
+  # ── 투썸플레이스 (공식 사이트 자동 접근 차단 → 2차) ──
+  - [투썸플레이스, 아메리카노 (블랙그라운드), HOT, Regular, 355, 177, 2차, coffee4m_am, "ICE Regular는 414ml"]
+  - [투썸플레이스, 아메리카노 (블랙그라운드), null, Large, 474, 265, 2차, coffee4m_am, ""]
+  - [투썸플레이스, 아메리카노 (블랙그라운드), null, Max, 591, 353, 2차, coffee4m_am, ""]
+  - [투썸플레이스, 아메리카노 (아로마노트), HOT, Regular, 355, 220, 2차, coffee4m_am, "원두에 따라 약 25% 차이"]
+  - [투썸플레이스, 아메리카노 (아로마노트), null, Large, 474, 330, 2차, coffee4m_am, ""]
+  - [투썸플레이스, 아메리카노 (아로마노트), null, Max, 591, 440, 2차, coffee4m_am, ""]
+  - [투썸플레이스, 디카페인 아메리카노, null, Regular, null, 5.3, 2차, coffee4m_decaf, "작성자 계산값"]
+  # ── 할리스 ──
+  - [할리스, 아메리카노, null, Regular, 354, 114, 공식, hollys, "HOT=ICE"]
+  - [할리스, 아메리카노, null, Grande, 472, 171, 2차, coffee4m_am, ""]
+  - [할리스, 아메리카노, null, Venti, 591, 228, 2차, coffee4m_am, ""]
+  - [할리스, 카페 라떼, null, Regular, 354, 127, 공식, hollys, "공식 표기상 아메리카노보다 높음"]
+  - [할리스, 콜드브루, ICE, Regular, 354, 195, 공식, hollys, ""]
+  - [할리스, 디카페인 콜드브루, ICE, Regular, 354, 6, 공식, hollys, ""]
+  - [할리스, 디카페인 아메리카노, null, Regular, 354, 7, 2차, coffee4m_decaf, "Grande 10.5 / Venti 14"]
+  - [할리스, 에스프레소, HOT, Solo, 25, 61, 공식, hollys, ""]
+  - [할리스, 제주 말차 라떼, null, Regular, 354, 129, 공식, hollys_sig, ""]
+  - [할리스, 로얄 밀크티 라떼, null, Regular, null, 51, 공식, hollys_sig, ""]
+  # ── 커피빈 (공식은 사이즈 표기 없음 → Small 기준 추정) ──
+  - [커피빈, 아메리카노, HOT, 기본, null, 182, 공식, coffeebean, "HOT 2샷"]
+  - [커피빈, 아이스 아메리카노, ICE, 기본, null, 91, 공식, coffeebean, "ICE 1샷"]
+  - [커피빈, 아메리카노, HOT, Regular, 473, 294, 2차, coffee4m_am, "2차 Small 196과 공식 182 차이 → 공식 우선"]
+  - [커피빈, 아메리카노, HOT, Large, 591, 392, 2차, coffee4m_am, ""]
+  - [커피빈, 아이스 아메리카노, ICE, Regular, 473, 196, 2차, coffee4m_am, ""]
+  - [커피빈, 아이스 아메리카노, ICE, Large, 591, 294, 2차, coffee4m_am, ""]
+  - [커피빈, 카페라떼, null, 기본, null, 91, 공식, coffeebean, ""]
+  - [커피빈, 콜드브루, ICE, 기본, null, 190, 공식, coffeebean_cb, ""]
+  - [커피빈, 에스프레소 싱글, HOT, Single, null, 91, 공식, coffeebean, "더블 182"]
+  - [커피빈, 디카페인 아메리카노, HOT, Small, 355, 20, 2차, coffee4m_decaf, "ICE Small 10"]
+  - [커피빈, 제주 첫물 말차 라떼, null, 기본, null, 209, 공식, coffeebean_tea, "아메리카노보다 많음"]
+  - [커피빈, 차이 라떼, null, 기본, null, 74, 공식, coffeebean_tea, ""]
+  # ── 메가MGC커피 (전부 공식) ──
+  - [메가MGC커피, 아메리카노, HOT, 기본, 591, 236, 공식, mega, "2샷"]
+  - [메가MGC커피, 아메리카노, ICE, 기본, 710, 236, 공식, mega, ""]
+  - [메가MGC커피, 메가리카노, ICE, 대, 946, 354, 공식, mega, ""]
+  - [메가MGC커피, 카페라떼, null, 기본, 591, 236, 공식, mega, "HOT=ICE"]
+  - [메가MGC커피, 왕메가카페라떼, ICE, 대, 946, 354, 공식, mega, ""]
+  - [메가MGC커피, 콜드브루오리지널, HOT, 기본, 591, 210, 공식, mega, ""]
+  - [메가MGC커피, 콜드브루오리지널, ICE, 기본, 591, 157.5, 공식, mega, ""]
+  - [메가MGC커피, 디카페인 아메리카노, HOT, 기본, 591, 7.8, 공식, mega, ""]
+  - [메가MGC커피, 디카페인 아메리카노, ICE, 기본, 710, 7.8, 공식, mega, ""]
+  - [메가MGC커피, 디카페인 메가리카노, ICE, 대, 946, 11.7, 공식, mega, ""]
+  - [메가MGC커피, 에스프레소, HOT, 1샷, 59, 118, 공식, mega, "샷 추가 1개 ≈ 118mg (추정)"]
+  - [메가MGC커피, 녹차라떼, HOT, 기본, 591, 82.9, 공식, mega, "소비자원 2026 실측 45mg"]
+  - [메가MGC커피, 녹차라떼, ICE, 기본, 591, 94.2, 공식, mega, ""]
+  - [메가MGC커피, 로얄밀크티라떼, null, 기본, 591, 74.7, 공식, mega, "소비자원 2026 실측 57mg"]
+  - [메가MGC커피, 녹차, HOT, 기본, 591, 30.6, 공식, mega, ""]
+  - [메가MGC커피, 녹차, ICE, 기본, 710, 54.3, 공식, mega, ""]
+  # ── 컴포즈커피 (전부 공식) ──
+  - [컴포즈커피, 아메리카노, null, 기본, 591, 185.81, 공식, compose, "HOT=ICE"]
+  - [컴포즈커피, 빅포즈 아메리카노, ICE, 대, 946, 371.62, 공식, compose, ""]
+  - [컴포즈커피, 카페라떼, null, 기본, 591, 247.75, 공식, compose, "라떼가 아메리카노보다 높음"]
+  - [컴포즈커피, 빅포즈 카페라떼, ICE, 대, 946, 495.49, 공식, compose, "1잔으로 하루 상한 초과"]
+  - [컴포즈커피, 콜드브루, null, 기본, 591, 181, 공식, compose, ""]
+  - [컴포즈커피, 디카페인 아메리카노, null, 기본, 591, 9.16, 공식, compose, ""]
+  - [컴포즈커피, 빅포즈 디카페인 아메리카노, ICE, 대, 946, 18.32, 공식, compose, ""]
+  - [컴포즈커피, 그린티라떼, null, 기본, 591, 112.67, 공식, compose, ""]
+  - [컴포즈커피, 밀크티, null, 기본, 591, 123.53, 공식, compose, ""]
+  # ── 빽다방 (전부 공식) ──
+  - [빽다방, 아메리카노, HOT, 기본, 510, 197, 공식, paik, "HOT이 ICED보다 높게 표기됨"]
+  - [빽다방, 아메리카노, ICE, 기본, 660, 166, 공식, paik, ""]
+  - [빽다방, 빽사이즈 아메리카노, ICE, 대, 990, 293, 공식, paik, ""]
+  - [빽다방, 카페라떼, HOT, 기본, 510, 152, 공식, paik, ""]
+  - [빽다방, 카페라떼, ICE, 기본, 660, 163, 공식, paik, ""]
+  - [빽다방, 빽사이즈 카페라떼, ICE, 대, 990, 286, 공식, paik, ""]
+  - [빽다방, 콜드브루, HOT, 기본, 510, 174, 공식, paik, ""]
+  - [빽다방, 콜드브루, ICE, 기본, 660, 177.8, 공식, paik, ""]
+  - [빽다방, 디카페인 아메리카노, HOT, 기본, 510, 1.0, 공식, paik, ""]
+  - [빽다방, 디카페인 아메리카노, ICE, 기본, 660, 1.2, 공식, paik, ""]
+  - [빽다방, 더블 에스프레소, HOT, 2샷, 60, 269, 공식, paik, "샷 추가 1개 ≈ 134.5mg (추정)"]
+  - [빽다방, 말차라떼, HOT, 기본, 510, 130.5, 공식, paik_drink, "소비자원 2026 실측 93mg"]
+  - [빽다방, 말차라떼, ICE, 기본, 660, 104.4, 공식, paik_drink, ""]
+  - [빽다방, 밀크티, HOT, 기본, 510, 152.7, 공식, paik_drink, ""]
+  - [빽다방, 밀크티, ICE, 기본, 660, 157.4, 공식, paik_drink, ""]
+  # ── 이디야 (전부 공식, R 사이즈 없음) ──
+  - [이디야커피, 카페 아메리카노, null, L, 520, 202, 공식, ediya, "HOT=ICE, 2샷"]
+  - [이디야커피, 카페 아메리카노, HOT, EX, 650, 303, 공식, ediya, "3샷"]
+  - [이디야커피, 카페 아메리카노, ICE, EX, 670, 303, 공식, ediya, ""]
+  - [이디야커피, 카페 라떼, null, L, 520, 202, 공식, ediya, ""]
+  - [이디야커피, 카페 라떼, ICE, EX, 670, 303, 공식, ediya, "HOT EX 650ml 303mg"]
+  - [이디야커피, 콜드브루, ICE, L, 520, 181, 공식, ediya, ""]
+  - [이디야커피, 콜드브루, ICE, EX, 670, 272, 공식, ediya, ""]
+  - [이디야커피, 디카페인 아메리카노, null, L, 520, 7, 공식, ediya, "디카페인 표시 없는 행을 디카페인으로 판단"]
+  - [이디야커피, 디카페인 아메리카노, null, EX, 670, 10, 공식, ediya, ""]
+  - [이디야커피, 디카페인 콜드브루, ICE, L, 520, 12, 공식, ediya, "EX 18"]
+  - [이디야커피, 에스프레소, HOT, 1샷, 30, 101, 공식, ediya, "샷 추가 1개 ≈ 101mg"]
+  - [이디야커피, 말차라떼, null, L, 520, 77, 공식, ediya, "EX 115"]
+  - [이디야커피, 로열 밀크티, HOT, L, 520, 119, 공식, ediya, "EX ICE 670ml 178mg"]
+  # ── 더벤티 (공식 PDF 2026-10-14) ──
+  - [더벤티, 아메리카노 (시그니처 로스트), null, 라지, 600, 168, 공식, venti, "2샷, 다크 로스트면 266"]
+  - [더벤티, 아메리카노 (시그니처 로스트), ICE, 점보, 960, 336, 공식, venti, ""]
+  - [더벤티, 카페라떼 (다크 로스트), null, 라지, 600, 266, 공식, venti, ""]
+  - [더벤티, 카페라떼 (다크 로스트), null, 점보, 960, 532, 공식, venti, "1잔으로 하루 상한 초과"]
+  - [더벤티, 콜드브루, null, 라지, 600, 222, 공식, venti, ""]
+  - [더벤티, 콜드브루, null, 점보, 960, 381, 공식, venti, ""]
+  - [더벤티, 디카페인 아메리카노, null, 라지, 600, 9, 공식, venti, "점보 17"]
+  - [더벤티, 말차라떼, null, 라지, 600, 69, 공식, venti, "점보 115"]
+  - [더벤티, 로얄밀크티, null, 라지, 600, 41, 공식, venti, "점보 68"]
+  # ── 편의점 커피 (2차: 다나와 제품 스펙, 라벨 사진 확인 권장) ──
+  - [맥심, TOP 스위트아메리카노, null, 캔, 275, 98, 2차, danawa 1104143, ""]
+  - [레쓰비, 레쓰비 마일드, null, 캔, 150, 63, 2차, danawa 58094891, "175·240ml는 미확인"]
+  - [스타벅스 RTD, 파이크플레이스 로스트 스위트블랙, null, 병, 275, 147, 2차, danawa 112020115, "고카페인 표시"]
+  - [스타벅스 RTD, 파이크플레이스 로스트 블랙, null, 병, 275, 132, 2차, danawa 3202346, ""]
+  - [스타벅스 RTD, 더블샷 에스프레소&크림, null, 캔, 200, 132, 2차, danawa 2071794, ""]
+  - [스타벅스 RTD, 카페라떼 컵, null, 컵, 200, 96, 2차, danawa 6904708, ""]
+  - [스타벅스 RTD, 카페라떼 컵, null, 컵, 270, 92, 2차, danawa 825466, ""]
+  - [스타벅스 RTD, 스무스 아메리카노, null, 컵, 270, 124, 2차, danawa 114782693, ""]
+  - [스타벅스 RTD, 스키니 라떼, null, 컵, 200, 103, 2차, danawa 115921386, ""]
+  - [바리스타룰스, 콜드브루 블랙, null, 컵, 325, 150, 공공, kca2022_rtd, "소비자원 2022 조사 인용, 용량은 판매처 표기"]
+  # ── 에너지음료 (한국 판매품, 2차) ──
+  - [레드불, 레드불, null, 캔, 250, 62.5, 2차, danawa 1686301, "해외판 80mg과 다름"]
+  - [레드불, 레드불, null, 캔, 355, 88.75, 2차, danawa 13125869, ""]
+  - [몬스터, 몬스터 에너지 (오리지널·울트라·제로), null, 캔, 355, 100, 2차, danawa 4227556, ""]
+  - [몬스터, 몬스터 울트라, null, 캔, 500, 140, 2차, danawa 108445223, ""]
+  - [핫식스, 핫식스, null, 캔, 250, 60, 2차, danawa 1686231, ""]
+  - [핫식스, 핫식스, null, 캔, 355, 86, 2차, danawa 15090593, "60mg 표기와 충돌, 농도상 86 타당"]
+  - [핫식스, 핫식스 제로, null, 캔, 250, 70, 2차, danawa 124199749, ""]
+  - [핫식스, 핫식스 더킹, null, 캔, 355, 100, 2차, danawa 16468484, ""]
+  - [핫식스, 핫식스 더 프로, null, 캔, 355, 120, 2차, danawa 90499907, ""]
+  # ── 차·탄산·믹스 (카테고리 기본값, 오래된 자료) ──
+  - [일반, 녹차 티백, HOT, 티백 1개, null, 15, 공공, kfda2007, "식약청 2007 평균, 시판품 13.7–26.8 (2001)"]
+  - [일반, 홍차 티백, HOT, 티백 1개, null, 29, 학술, tea2001, "시판품 19.5–38.3의 가운데 값"]
+  - [코카콜라, 코카콜라, null, 캔, 355, 34, 공식, coke, "미국 제품 기준, 한국 표시는 mg 없음"]
+  - [일반, 콜라, null, 캔, 250, 23, 공공, kfda2007, "식약청 2007 평균"]
+  - [펩시, 펩시 제로슈거 라임 제로카페인, null, 캔, 355, 0, 2차, danawa 64170668, ""]
+  - [일반, 커피믹스, HOT, 1봉, null, 52.2, 공공, kca2014_mix, "소비자원 2014, 12종 평균 (40.9–77.2)"]
