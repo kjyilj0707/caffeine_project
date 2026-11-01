@@ -206,6 +206,24 @@ conversion:  # ⑤ mg → 음료·모금
     source: "설계값 (사용자가 첫 사용 때 보정)"
     status: provisional
 
+notify:  # Step 3 알림 (ntfy 예약 푸시)
+  utc_offset_h:
+    value: 9
+    source: "한국 표준시 UTC+9 (서머타임 없음 → 고정 오프셋, 브라우저 속 Python에 시간대 DB가 없어도 정확)"
+    status: confirmed
+  min_lead_s:
+    value: 30
+    source: "설계값: 지금부터 30초 안쪽이거나 지난 알림은 보내지 않음 (ntfy 예약 최소 10초)"
+    status: provisional
+  max_ahead_h:
+    value: 72
+    source: "ntfy 예약 최대 3일"
+    status: confirmed
+  server:
+    value: "https://ntfy.sh"
+    source: "ntfy 공개 서버 (2026-11-01 핸드폰 예약 푸시 테스트 성공)"
+    status: confirmed
+
 metrics:  # 지표 계산용
   sleep_need_h:
     value: 8.0

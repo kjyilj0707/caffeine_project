@@ -72,7 +72,7 @@ def test_pages_index_lists_every_runtime_file():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     listed = set(re.findall(r'"((?:app|caffeine_engine|scenarios)/[^"]+|parameters\.yaml)"', html))
     needed = {str(p.relative_to(ROOT)) for p in (ROOT / "caffeine_engine").glob("*.py")}
-    needed |= {"app/streamlit_app.py", "app/forms.py", "app/charts.py", "parameters.yaml"}
+    needed |= {str(p.relative_to(ROOT)) for p in (ROOT / "app").glob("*.py")} | {"parameters.yaml"}
     needed |= {str(p.relative_to(ROOT)) for p in (ROOT / "scenarios").glob("*.yaml")}
     assert needed <= listed, f"index.html에 빠진 파일: {needed - listed}"
     assert (ROOT / ".nojekyll").exists()  # 없으면 __init__.py 같은 _로 시작하는 파일이 배포에서 빠짐
