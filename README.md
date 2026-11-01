@@ -81,8 +81,9 @@ print(format_card(result))
 | 경로 | 내용 |
 | --- | --- |
 | `parameters.yaml` | 엔진의 모든 숫자 + 출처 + 확정/임시 상태 |
+| `beverages.yaml` | **음료 카페인 DB 129종** — 카페 9개 브랜드·편의점 커피·에너지음료·차 (출처·용량·mg, 조사일 2026-11-01) |
 | `caffeine_engine/` | 계산 엔진 — `profile.py` ① · `fatigue.py` ② · `pk.py` ③ · `effect.py` 카페인 효과 · `optimizer.py` ④ · `convert.py` ⑤ · `metrics.py` 지표 · `pipeline.py` 전체 실행 + 결과 카드 · `scenario.py` 시나리오 파일 읽기 · `notify.py` 플랜 → 예약 알림 |
-| `tests/` | 논문 결과 재현 + 규칙 준수 + 화면 + 알림 검사 (91개) |
+| `tests/` | 논문 결과 재현 + 규칙 준수 + 화면 + 알림 + 음료 DB 검사 (98개) |
 | `app/` | **입력 화면** (Streamlit) — `streamlit_app.py` 화면 · `forms.py` 입력 변환 · `charts.py` 인터랙티브 그래프 · `ntfy.py` 알림 전송 |
 | `index.html` | GitHub Pages용 — stlite로 브라우저 안에서 Python을 돌려 `app/`을 서버 없이 실행 |
 | `scenarios/` | **데모 입력 파일** — 고쳐서 다시 실행하면 결과가 바뀜 |
@@ -137,7 +138,8 @@ beverage: coffee        # coffee / black_tea / {name: "아메리카노 톨", mg:
 - [x] Step 1-6 — 데모 (시나리오 파일 → 결과 카드 + 그래프)
 - [x] Step 2 — 입력 화면 MVP (Streamlit, GitHub Pages 배포)
 - [x] Step 3 — 알림 (☕ 마셔 / ⛔ 금지 / 상한 경고) — ntfy 예약 푸시, 핸드폰 수신 확인
-- [ ] Step 4~ — 기록·리포트, 음료 DB, 피드백 개인화
+- [x] 음료 카페인 DB 조사 (129종, `beverages.yaml`) — 앱 메뉴 선택 연결은 예정
+- [ ] Step 4~ — 기록·리포트, 피드백 개인화
 
 ### Step 3 알림 — 방식 테스트 (2026-11-01, 핸드폰)
 
