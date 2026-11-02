@@ -1,7 +1,7 @@
 """기록 저장·불러오기 (Step 4-3) — 입력 화면의 내용 ↔ 서버 표(profiles, sleep_logs, intakes, plans).
 
 화면은 '시각만'(예: "01:30-08:00") 다루고 서버는 '날짜+시각'(timestamptz)을 저장한다.
-그날의 기준(D)은 어젯밤 기록의 깬 날짜이고, 엔진 시각 h는 D 0시(한국 시간) + h시간이다.
+그날의 기준(D)은 화면에서 고른 날짜(그날 아침에 깬 날)이고, 엔진 시각 h는 D 0시(한국 시간) + h시간이다.
 
   저장: 화면 내용을 엔진 형식으로 바꾼 뒤(scenario.from_dict) 실제 날짜·시각으로 바꿔 저장.
         수면·마신 것은 '화면에 있는 기간'의 기존 기록을 지우고 새로 넣는다(고친 내용이 그대로 반영).
@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 from caffeine_engine import params
-from caffeine_engine.notify import day_start, local_tz, to_datetime
+from caffeine_engine.notify import local_tz, to_datetime
 from caffeine_engine.scenario import from_dict
 from caffeine_engine.timeutil import h_to_hhmm
 
@@ -137,16 +137,26 @@ def plan_summary(result) -> Dict:
 
 
 # ── 서버와 주고받기 ──
-def save_day(session: Session, scenario_dict: Dict, sex: str, result, transport: Optional[Transport] = None,
-             real_now: Optional[datetime] = None) -> Dict:
-    """화면 내용 전체를 저장. 돌려주는 값: 저장한 건수 (화면 안내용)."""
+def _midnight(day: date) -> datetime:
+    """그날 0시(한국 시간) = 엔진 시각 0h."""
+    return datetime(day.year, day.month, day.day, tzinfo=local_tz())
+
+
+def save_profile(session: Session, profile: Dict, sex: str, sip_ml: float, year: int,
+                 transport: Optional[Transport] = None) -> None:
+    rest(session, "POST", "profiles?on_conflict=user_id",
+         profile_to_row(session.user_id, profile, sex, sip_ml, year),
+         prefer="resolution=merge-duplicates", transport=transport)
+
+
+def save_day(session: Session, scenario_dict: Dict, sex: str, result, day: date,
+             transport: Optional[Transport] = None) -> Dict:
+    """고른 날짜(day)의 입력 전체를 저장. 돌려주는 값: 저장한 건수 (화면 안내용)."""
     sc = from_dict(scenario_dict)
-    start = day_start(sc.now_h, real_now)
+    start = _midnight(day)
     send = dict(transport=transport)
 
-    rest(session, "POST", "profiles?on_conflict=user_id",
-         profile_to_row(session.user_id, scenario_dict["profile"], sex, scenario_dict["sip_ml"], start.year),
-         prefer="resolution=merge-duplicates", **send)
+    save_profile(session, scenario_dict["profile"], sex, scenario_dict["sip_ml"], day.year, **send)
 
     sleeps = sleeps_to_rows(scenario_dict, start)
     woke = [_parse_ts(r["woke_at"]) for r in sleeps]
@@ -161,55 +171,72 @@ def save_day(session: Session, scenario_dict: Dict, sex: str, result, transport:
     if intakes:
         rest(session, "POST", "intakes", intakes, **send)
 
-    rest(session, "POST", "plans", {"plan_date": start.date().isoformat(), "engine_version": ENGINE_VERSION,
+    rest(session, "POST", "plans", {"plan_date": day.isoformat(), "engine_version": ENGINE_VERSION,
                                     "params_hash": params_hash(), "inputs": {**scenario_dict, "sex": sex},
                                     "result": plan_summary(result)}, **send)
     return {"nights": len(sleeps), "intakes": len(intakes)}
 
 
-def load_day(session: Session, transport: Optional[Transport] = None,
-             real_now: Optional[datetime] = None) -> Tuple[Dict, List[str]]:
-    """서버 기록 → 화면 시작값(시나리오 형식 일부 + 'sex') 과 안내 문구.
-    저장된 게 없는 항목은 넣지 않는다(화면이 예시값을 그대로 씀)."""
+def recorded_days(session: Session, transport: Optional[Transport] = None) -> List[date]:
+    """수면 기록이 있는 날짜(깬 날 기준, 최근 31일치) — 달력 옆 '기록 있는 날' 표시용."""
+    rows = rest(session, "GET", "sleep_logs?select=woke_at&order=woke_at.desc&limit=31", transport=transport)
+    return sorted({_parse_ts(r["woke_at"]).date() for r in rows})
+
+
+def load_day(session: Session, day: date, transport: Optional[Transport] = None) -> Tuple[Dict, List[str]]:
+    """고른 날짜의 서버 기록 → 화면 시작값과 안내 문구. 저장된 게 없는 항목은 넣지 않는다.
+
+    last_night: 그날 아침에 깬 밤 (없으면 넣지 않음) · prev_nights: 그 전 밤들(하루씩 이어진 것만)
+    today: already(그날 마신 것), bed·windows(그날 플랜, 없으면 가장 최근 플랜) · beverage
+    """
     send = dict(transport=transport)
-    now = (real_now or datetime.now(local_tz())).astimezone(local_tz())
     base: Dict = {}
     notes: List[str] = []
 
     rows = rest(session, "GET", "profiles?select=*", **send)
     if rows:
-        profile, sex, sip = row_to_profile(rows[0], now.year)
+        profile, sex, sip = row_to_profile(rows[0], day.year)
         base.update(profile=profile, sex=sex)
         if sip:
             base["sip_ml"] = sip
-        notes.append("기본 정보")
+        notes.append("프로필")
 
-    since = now - timedelta(days=MAX_NIGHTS + 1)
-    rows = rest(session, "GET", f"sleep_logs?select=slept_at,woke_at,quality,sleep_latency_min&woke_at=gte.{_q(since)}"
-                f"&woke_at=lte.{_q(now)}&order=woke_at.asc", **send)
-    sleep = rows_to_sleeps(rows) if rows else []
-    if sleep:
-        base["sleep"] = sleep
-        notes.append(f"수면 {len(sleep)}밤")
-        wake = max(_parse_ts(r["woke_at"]) for r in rows)
-        rows = rest(session, "GET", f"intakes?select=taken_at,mg,sips&taken_at=gte.{_q(wake)}"
-                    f"&taken_at=lt.{_q(wake + timedelta(days=1))}&order=taken_at.asc", **send)
-        base["today"] = {"already": rows_to_intakes(rows)}
-        if rows:
-            notes.append(f"오늘 마신 것 {len(rows)}건")
-        today: Optional[date] = wake.date()
-    else:
-        today = None
+    start = _midnight(day)
+    rows = rest(session, "GET", f"sleep_logs?select=slept_at,woke_at,quality,sleep_latency_min"
+                f"&woke_at=gte.{_q(start - timedelta(days=MAX_NIGHTS))}&woke_at=lt.{_q(start + timedelta(days=1))}"
+                f"&order=woke_at.asc", **send)
+    if rows:
+        nights = rows_to_sleeps(rows)
+        last = max(rows, key=lambda r: _parse_ts(r["woke_at"]))
+        last_date = _parse_ts(last["woke_at"]).date()
+        if last_date == day:
+            base["last_night"] = nights[-1] if isinstance(nights[-1], dict) else {"time": nights[-1]}
+            base["prev_nights"] = nights[:-1]
+            notes.append("어젯밤 잠")
+            wake = _parse_ts(last["woke_at"])
+            rows = rest(session, "GET", f"intakes?select=taken_at,mg,sips&taken_at=gte.{_q(wake)}"
+                        f"&taken_at=lt.{_q(wake + timedelta(days=1))}&order=taken_at.asc", **send)
+            base["today"] = {"already": rows_to_intakes(rows)}
+            if rows:
+                notes.append(f"마신 것 {len(rows)}건")
+        elif last_date == day - timedelta(days=1):
+            base["prev_nights"] = nights
+        if base.get("prev_nights"):
+            notes.append(f"그 전 밤 {len(base['prev_nights'])}개")
 
-    # 목표(시간대·취침)와 음료는 오늘 플랜, 없으면 가장 최근 플랜에서 (보통 매일 비슷하므로)
-    rows = rest(session, "GET", "plans?select=plan_date,inputs&order=created_at.desc&limit=1", **send)
+    # 일정(잘 시각·시간대)과 음료는 그날 플랜, 없으면 가장 최근 플랜에서 (보통 매일 비슷하므로)
+    rows = rest(session, "GET", f"plans?select=plan_date,inputs&plan_date=eq.{day.isoformat()}"
+                f"&order=created_at.desc&limit=1", **send)
+    same_day = bool(rows)
+    if not rows:
+        rows = rest(session, "GET", "plans?select=plan_date,inputs&order=created_at.desc&limit=1", **send)
     if rows:
         inputs = rows[0]["inputs"]
         goal = {k: inputs["today"][k] for k in ("bed", "windows") if k in inputs.get("today", {})}
         base.setdefault("today", {}).update(goal)
         if "beverage" in inputs:
             base["beverage"] = inputs["beverage"]
-        notes.append("오늘 목표" if today and rows[0]["plan_date"] == today.isoformat() else "최근 목표")
+        notes.append("그날 일정" if same_day else "최근 일정")
     return base, notes
 
 
