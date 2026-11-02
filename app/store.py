@@ -326,3 +326,20 @@ def push_test(session: Session, item, transport: Optional[Transport] = None) -> 
     """item: notify.schedule_test()의 결과."""
     rest(session, "POST", "notifications", {"send_at": _ts(item.at), "kind": "test", "title": item.notification.title,
                                             "body": item.notification.message}, transport=transport)
+
+
+def report_rows(session: Session, first: date, last: date, transport: Optional[Transport] = None) -> Dict[str, List]:
+    """리포트용 원자료: first~last(포함) 날짜의 마신 것·플랜·수면·졸림 기록 (하루 = 새벽 4시 ~ 다음 날 새벽 4시)."""
+    send = dict(transport=transport)
+    lo, hi = _day_window(first)[0], _day_window(last)[1]
+    start, end = _midnight(first), _midnight(last) + timedelta(days=1)
+    return {
+        "intakes": rest(session, "GET", f"intakes?select=taken_at,mg&taken_at=gte.{_q(lo)}&taken_at=lt.{_q(hi)}"
+                        f"&order=taken_at.asc", **send),
+        "plans": rest(session, "GET", f"plans?select=plan_date,result,created_at&plan_date=gte.{first.isoformat()}"
+                      f"&plan_date=lte.{last.isoformat()}&order=created_at.asc", **send),
+        "sleeps": rest(session, "GET", f"sleep_logs?select=slept_at,woke_at,quality,sleep_latency_min"
+                       f"&woke_at=gte.{_q(start)}&woke_at=lt.{_q(end)}&order=woke_at.asc", **send),
+        "kss": rest(session, "GET", f"feedback?select=at,kss&kind=eq.sleepiness&at=gte.{_q(lo)}&at=lt.{_q(hi)}"
+                    f"&order=at.asc", **send),
+    }

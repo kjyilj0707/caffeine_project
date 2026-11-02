@@ -184,7 +184,8 @@ if st.button("저장하고 추천 보기 →", type="primary", width="stretch"):
             store.save_day(s, sd, d["sex"], result, state.selected_day())
             d["example"] = False
             st.session_state.pop("recorded_days", None)
-            st.session_state.pop("cal_cache", None)      # 달력도 새 기록으로
+            st.session_state.pop("cal_cache", None)      # 달력·리포트도 새 기록으로
+            st.session_state.pop("report_cache", None)
             st.session_state.just_saved = True
         except Exception as e:
             st.error(f"저장하지 못했어요: {e}")

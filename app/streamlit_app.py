@@ -4,6 +4,7 @@
 
   ☕ 오늘의 추천 (page_plan.py)    몇 시에 몇 모금 · 금지 시각 (그래프·수치·알림은 펼쳐 보기)
   📅 하루 입력  (page_day.py)     날짜 고르기 → 어젯밤 잠 · 마신 것 · 일정 · 음료
+  📊 리포트    (page_report.py)  하루·일주일·한 달: 마신 양, 추천대로 마셨나, 금지 시각, 잠, 졸림
   👤 내 프로필  (page_profile.py) 나이·몸무게·건강·민감도 (한 번만)
 
 입력값은 state.py의 data 한 곳에 모인다. 로그인은 화면 맨 위 바(index.html)에서.
@@ -26,6 +27,7 @@ state.ensure_loaded()
 nav = st.navigation([
     st.Page("page_plan.py", title="오늘의 추천", icon="☕", default=True),
     st.Page("page_day.py", title="하루 입력", icon="📅"),
+    st.Page("page_report.py", title="리포트", icon="📊"),
     st.Page("page_profile.py", title="내 프로필", icon="👤"),
 ])
 

@@ -149,6 +149,7 @@ if s is not None and state.is_today():
         try:
             store.add_sleepiness(s, kss, kss_note)
             st.session_state.pop("kss_today", None)   # 아래 '오늘 기록'을 다시 불러오게
+            st.session_state.pop("report_cache", None)
             st.success(f"기록했어요: {h_to_hhmm(current_time_h())} 즈음 졸림 {kss}")
         except Exception as e:
             st.error(f"기록하지 못했어요: {e}")
