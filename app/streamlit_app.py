@@ -144,8 +144,12 @@ with left:
 
     with tab_today:
         st.markdown("**최근 수면** — 오래된 밤부터, 마지막 줄 = 어젯밤")
+        # 숫자 칸은 처음부터 숫자형으로 — 전부 비어 있으면 '글자형'이 되어 입력한 숫자가 반영되지 않았음
+        sleep_rows = pd.DataFrame(sleep_list_to_rows(base.get("sleep", [])),
+                                  columns=["잠든 시각", "깬 시각", "수면 질", LATENCY_COL])
+        sleep_rows[["수면 질", LATENCY_COL]] = sleep_rows[["수면 질", LATENCY_COL]].astype("float64")
         sleep_df = st.data_editor(
-            pd.DataFrame(sleep_list_to_rows(base.get("sleep", []))), num_rows="dynamic", key=key("sleep"),
+            sleep_rows, num_rows="dynamic", key=key("sleep"),
             width="stretch",
             column_config={
                 "잠든 시각": st.column_config.TimeColumn(format="HH:mm", step=900, required=True),
