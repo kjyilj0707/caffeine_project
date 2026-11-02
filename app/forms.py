@@ -5,6 +5,9 @@ from typing import Iterable, List, Optional
 KIND_LABELS = ["깨어 있기", "졸면 안 됨", "집중"]
 SENSITIVITY_LABEL = {"sensitive": "민감", "normal": "보통", "tolerant": "둔감"}
 CHRONOTYPE_LABEL = {"morning": "아침형", "neutral": "보통", "evening": "저녁형"}
+# 카롤린스카 졸림 척도(KSS) — 홀수 단계에만 설명이 있는 원래 척도를 그대로 따름
+KSS_LABEL = {1: "매우 또렷함", 3: "또렷함", 5: "또렷하지도 졸리지도 않음", 7: "졸림 (깨어 있기는 어렵지 않음)",
+             9: "매우 졸림 (잠과 싸우는 중)"}
 
 
 def sensitivity_from_survey(cups_per_day: int, late_coffee_hurts_sleep: str, palpitations: str) -> str:
@@ -34,18 +37,31 @@ def to_time(text: str) -> time:
     return time(h, m)
 
 
+LATENCY_COL = "잠들기 (분)"
+
+
+def _num(x) -> Optional[int]:
+    return None if x is None or x != x else int(x)
+
+
 def sleep_rows_to_list(rows: Iterable[dict]) -> List:
-    """수면 표 행 [{잠든 시각, 깬 시각, 수면 질}] → 시나리오 sleep 목록 (빈 행은 건너뜀)."""
+    """수면 표 행 [{잠든 시각, 깬 시각, 수면 질, 잠들기 (분)}] → 시나리오 sleep 목록 (빈 행은 건너뜀).
+    잠들기 = 누워서 잠들 때까지 걸린 시간 (매일 피드백, 엔진 계산에는 안 쓰고 저장만)."""
     out = []
     for r in rows:
         start, wake = hhmm(r.get("잠든 시각")), hhmm(r.get("깬 시각"))
         if not (start and wake):
             continue
-        quality = r.get("수면 질")
-        if quality is None or quality != quality:
+        quality, latency = _num(r.get("수면 질")), _num(r.get(LATENCY_COL))
+        if quality is None and latency is None:
             out.append(f"{start}-{wake}")
         else:
-            out.append({"time": f"{start}-{wake}", "quality": int(quality)})
+            night = {"time": f"{start}-{wake}"}
+            if quality is not None:
+                night["quality"] = quality
+            if latency is not None:
+                night["latency_min"] = latency
+            out.append(night)
     return out
 
 
@@ -74,9 +90,10 @@ def window_rows_to_list(rows: Iterable[dict]) -> List[dict]:
 def sleep_list_to_rows(sleep: Iterable) -> List[dict]:
     rows = []
     for night in sleep:
-        text, quality = (night, None) if isinstance(night, str) else (night["time"], night.get("quality"))
-        start, wake = (x.strip() for x in text.split("-"))
-        rows.append({"잠든 시각": to_time(start), "깬 시각": to_time(wake), "수면 질": quality})
+        night = {"time": night} if isinstance(night, str) else night
+        start, wake = (x.strip() for x in night["time"].split("-"))
+        rows.append({"잠든 시각": to_time(start), "깬 시각": to_time(wake), "수면 질": night.get("quality"),
+                     LATENCY_COL: night.get("latency_min")})
     return rows
 
 
@@ -89,3 +106,23 @@ def window_list_to_rows(windows: Iterable[dict]) -> List[dict]:
     kind_name = {"stay_awake": "깨어 있기", "must_not_sleep": "졸면 안 됨", "focus": "집중"}
     return [{"종류": kind_name.get(w["kind"], w["kind"]), "시작": to_time(w["from"]), "끝": to_time(w["to"])}
             for w in windows]
+
+
+# ── 음료 DB에서 고르기 (beverages.yaml) ──
+def beverage_choices(db) -> dict:
+    """{브랜드: {메뉴: [음료, ...]}} — 용량(ml)을 모르는 음료는 모금으로 바꿀 수 없어 뺀다. 브랜드는 DB 순서."""
+    out: dict = {}
+    for d in db:
+        if d.ml:
+            out.setdefault(d.brand, {}).setdefault(d.menu, []).append(d)
+    return out
+
+
+def size_label(d) -> str:
+    temp = f"{d.temp} · " if d.temp else ""
+    return f"{temp}{d.size} {d.ml:g}ml · {d.mg:g}mg"
+
+
+def beverage_spec(d) -> dict:
+    """시나리오 beverage 형식. db에 원래 이름을 남겨 다음에 같은 음료를 다시 골라 준다."""
+    return {"name": d.label, "mg": d.mg, "ml": d.ml, "db": d.label}

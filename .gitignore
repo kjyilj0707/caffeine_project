@@ -7,3 +7,6 @@ __pycache__/
 papers/*
 !papers/README.md
 ScienceDirect_articles_*/
+
+# 브라우저가 로그인 때 만드는 파일 (로컬에 생겨도 올리지 않음)
+.auth_session.json

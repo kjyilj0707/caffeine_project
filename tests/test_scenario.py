@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from caffeine_engine.pipeline import format_card, run_day
-from caffeine_engine.scenario import load
+from caffeine_engine.scenario import from_dict, load
 
 SCENARIOS = sorted((Path(__file__).resolve().parent.parent / "scenarios").glob("*.yaml"))
 
@@ -64,3 +64,15 @@ def test_pregnant_late_term_explains_why_no_caffeine():
     result = run_day(sc.profile, sc.sleeps, sc.windows, bed_h=sc.bed_h, now_h=sc.now_h)
     assert result.plan.new_doses == []
     assert any("마실 수 있는 시각이 없어요" in n for n in result.notes)
+
+
+def test_window_starting_before_wake_is_clipped_to_wake():
+    # 실제 사례(4-3 시험): 08:30에 일어났는데 '깨어 있기 08:00-23:00' → 예전엔 다음 날 08시로 보고 계산이 멈춤
+    from caffeine_engine.pipeline import run_day
+    sc = from_dict({"profile": {"age": 24, "weight_kg": 70}, "sleep": ["01:30-08:30"],
+                    "today": {"now": "09:00", "bed": "23:00",
+                              "windows": [{"kind": "깨어 있기", "from": "08:00", "to": "23:00"},
+                                          {"kind": "집중", "from": "06:00", "to": "07:00"}]}})
+    assert (sc.windows[0].start_h, sc.windows[0].end_h) == (8.5, 23.0)
+    assert (sc.windows[1].start_h, sc.windows[1].end_h) == (30.0, 31.0)  # 기상 전 시간대 → 다음 날 새벽 (기존 규칙)
+    run_day(sc.profile, sc.sleeps, sc.windows, bed_h=sc.bed_h, now_h=sc.now_h)

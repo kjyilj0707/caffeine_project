@@ -55,16 +55,49 @@ def test_chart_frames_cover_wake_to_after_bed():
     assert top["layer"] and bottom["layer"]
 
 
-def test_app_runs_and_switches_preset():
+def _app():
     from streamlit.testing.v1 import AppTest
-    at = AppTest.from_file(str(ROOT / "app" / "streamlit_app.py"), default_timeout=60).run()
+    return AppTest.from_file(str(ROOT / "app" / "streamlit_app.py"), default_timeout=60)
+
+
+def test_plan_page_shows_doses_first_and_switches_preset():
+    at = _app().run()
     assert not at.exception
-    assert [m.label.split(" (")[0] for m in at.metric] == ["오늘 총 섭취", "잠든 뒤 최대 잔량", "예상 수면 감소",
-                                                        "목표 구간 졸림"]
+    assert "추천" in at.title[0].value
+    assert any("예시 값" in i.value for i in at.info)                    # 아직 내 정보가 아님을 알려줌
+    labels = [e.label.split(" —")[0] for e in at.expander]
+    assert {"📈 그래프로 보기", "📊 자세한 수치", "🔔 핸드폰 알림 받기 (ntfy 앱 · 로그인 없이)"} <= set(labels)   # 펼쳐 보기
+    assert not at.metric or all(m.proto.label for m in at.metric)
     at.sidebar.selectbox[0].set_value("임신 후기 · 민감 (22시 30분 취침)")
     at.sidebar.button[0].click().run()
     assert not at.exception
-    assert any("마실 수 있는 시각이 없어요" in w.value for w in at.warning)
+
+
+def test_day_page_add_and_remove_intake_then_plan():
+    at = _app().run()
+    at.switch_page("page_day.py").run()
+    assert not at.exception
+    assert at.title[0].value == "📅 하루 입력"
+    at.number_input(key="add_already_n_0").set_value(6)
+    next(b for b in at.button if b.key == "add_already_0").click().run()
+    assert not at.exception
+    assert any("6모금" in m.value for m in at.markdown)
+    next(b for b in at.button if b.key == "add_집중_1").click().run()         # 집중 시간 추가 (14:00~16:00)
+    assert any(m.value == "14:00 ~ 16:00" for m in at.markdown)
+    next(b for b in at.button if b.label == "저장하고 추천 보기 →").click().run()
+    assert not at.exception
+    assert "추천" in at.title[0].value
+    assert any("이미 마신 것" in c.value and "6모금" in c.value for c in at.caption)
+
+
+def test_profile_page_updates_shared_data():
+    at = _app().run()
+    at.switch_page("page_profile.py").run()
+    assert not at.exception
+    at.radio(key="sex_0").set_value("여성").run()
+    at.checkbox(key="oc_0").check().run()
+    assert at.session_state.data["profile"]["oral_contraceptive"] is True
+    assert at.session_state.data["sex"] == "여성"
 
 
 def test_pages_index_lists_every_runtime_file():
@@ -115,10 +148,14 @@ def test_test_notification_button_and_bad_topic(monkeypatch):
     assert any("영문" in e.value for e in at.error)
 
 
-def test_real_now_button_sets_current_time(monkeypatch):
-    from caffeine_engine.notify import current_time_h
-    from caffeine_engine.timeutil import h_to_hhmm
-    at, _ = _app_with_fake_ntfy(monkeypatch)
-    next(b for b in at.button if b.label == "🕒 실제 현재 시각으로").click().run()
-    assert not at.exception
-    assert at.time_input[0].value.strftime("%H:%M") == h_to_hhmm(current_time_h())
+def test_menu_choices_skip_unknown_volume():
+    from forms import beverage_choices, beverage_spec, sleep_list_to_rows, sleep_rows_to_list
+    from caffeine_engine.convert import load_beverage_db
+    db = load_beverage_db()
+    choices = beverage_choices(db)
+    assert all(d.ml for menus in choices.values() for sizes in menus.values() for d in sizes)
+    tall = next(d for d in choices["스타벅스"]["카페 아메리카노"] if d.size == "Tall")
+    assert beverage_spec(tall) == {"name": tall.label, "mg": 150.0, "ml": 355.0, "db": tall.label}
+    assert '"beverages.yaml"' in (ROOT / "index.html").read_text(encoding="utf-8")  # 웹에서도 DB를 읽게
+    nights = ["00:30-07:30", {"time": "01:30-08:00", "quality": 3, "latency_min": 20}]
+    assert sleep_rows_to_list(sleep_list_to_rows(nights)) == nights
