@@ -118,3 +118,42 @@ def test_app_loads_saved_records_and_saves(monkeypatch):
     save.click().run()
     assert not at.exception and calls and calls[0][2] == "여성"
     assert any("저장했어요" in m.value for m in at.success)
+
+
+def test_sleep_latency_is_saved_and_loaded():
+    d = exam_day()
+    d["sleep"][-1] = {"time": "01:30-08:00", "quality": 3, "latency_min": 25}
+    rows = sleeps_to_rows(d, datetime(2026, 11, 2, tzinfo=KST))
+    assert [r["sleep_latency_min"] for r in rows] == [None, None, 25]
+    assert rows_to_sleeps(rows)[-1] == {"time": "01:30-08:00", "quality": 3, "latency_min": 25}
+
+
+def test_sleepiness_feedback():
+    from store import add_sleepiness, today_sleepiness
+    fake = FakeServer({"feedback": [{"at": "2026-11-02T05:30:00+00:00", "kss": 7, "note": None}]})
+    now = datetime(2026, 11, 2, 14, 30, tzinfo=KST)
+    fake_post = lambda m, u, h, b: (fake(m, u, h, b), (201, json.dumps([json.loads(b)])))[1]  # noqa: E731
+    row = add_sleepiness(SESSION, 7, " 시험 직전 ", transport=fake_post, real_now=now)
+    assert row == {"at": "2026-11-02T14:30:00+09:00", "kind": "sleepiness", "kss": 7, "note": "시험 직전"}
+    today = today_sleepiness(SESSION, transport=fake, real_now=now)
+    assert today[0]["time"] == "14:30"                         # 서버의 UTC 시각 → 한국 시각
+    assert "at=gte.2026-11-02T00%3A00%3A00%2B09%3A00" in fake.calls[-1][1]
+
+
+def test_app_menu_beverage_and_feedback(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+    saved = {"beverage": {"name": "스타벅스 카페 아메리카노 (Grande 473ml)", "mg": 225.0, "ml": 473.0,
+                          "db": "스타벅스 카페 아메리카노 (Grande 473ml)"}}
+    posted = []
+    monkeypatch.setattr(account, "current_session", lambda: SESSION)
+    monkeypatch.setattr(store, "load_day", lambda s: (saved, ["최근 목표"]))
+    monkeypatch.setattr(store, "today_sleepiness", lambda s: [])
+    monkeypatch.setattr(store, "add_sleepiness", lambda s, k, n: posted.append((k, n)))
+    at = AppTest.from_file(str(ROOT / "app" / "streamlit_app.py"), default_timeout=60).run()
+    assert not at.exception
+    assert at.radio(key="bev_1").value == "메뉴에서 고르기"           # 저장된 메뉴 음료가 다시 선택됨
+    assert at.selectbox(key="bev_brand_1").value == "스타벅스"
+    assert any("Grande" in m.value for m in at.markdown if "☕" in m.value)
+    at.select_slider(key="kss").set_value(7)
+    next(b for b in at.button if b.label == "기록").click().run()
+    assert not at.exception and posted == [(7, "")]

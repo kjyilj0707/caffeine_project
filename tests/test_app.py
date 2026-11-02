@@ -122,3 +122,16 @@ def test_real_now_button_sets_current_time(monkeypatch):
     next(b for b in at.button if b.label == "🕒 실제 현재 시각으로").click().run()
     assert not at.exception
     assert at.time_input[0].value.strftime("%H:%M") == h_to_hhmm(current_time_h())
+
+
+def test_menu_choices_skip_unknown_volume():
+    from forms import beverage_choices, beverage_spec, sleep_list_to_rows, sleep_rows_to_list
+    from caffeine_engine.convert import load_beverage_db
+    db = load_beverage_db()
+    choices = beverage_choices(db)
+    assert all(d.ml for menus in choices.values() for sizes in menus.values() for d in sizes)
+    tall = next(d for d in choices["스타벅스"]["카페 아메리카노"] if d.size == "Tall")
+    assert beverage_spec(tall) == {"name": tall.label, "mg": 150.0, "ml": 355.0, "db": tall.label}
+    assert '"beverages.yaml"' in (ROOT / "index.html").read_text(encoding="utf-8")  # 웹에서도 DB를 읽게
+    nights = ["00:30-07:30", {"time": "01:30-08:00", "quality": 3, "latency_min": 20}]
+    assert sleep_rows_to_list(sleep_list_to_rows(nights)) == nights

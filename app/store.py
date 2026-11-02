@@ -69,8 +69,10 @@ def row_to_profile(row: Dict, year: int) -> Tuple[Dict, str, Optional[float]]:
 # ── 수면 ──
 def sleeps_to_rows(scenario_dict: Dict, start: datetime) -> List[Dict]:
     sc = from_dict(scenario_dict)
+    # 엔진 수면 기록은 시간순 = 화면 표 순서(오래된 밤부터)라 같은 순서로 '잠들기' 피드백을 붙인다
+    latency = [n.get("latency_min") if isinstance(n, dict) else None for n in scenario_dict["sleep"]]
     return [{"slept_at": _ts(to_datetime(e.start_h, start)), "woke_at": _ts(to_datetime(e.end_h, start)),
-             "quality": e.quality} for e in sc.sleeps]
+             "quality": e.quality, "sleep_latency_min": lat} for e, lat in zip(sc.sleeps, latency)]
 
 
 def rows_to_sleeps(rows: List[Dict]) -> List:
@@ -81,8 +83,12 @@ def rows_to_sleeps(rows: List[Dict]) -> List:
         woke, slept = _parse_ts(r["woke_at"]), _parse_ts(r["slept_at"])
         if expected is not None and woke.date() != expected:
             break
-        text = f"{slept.strftime('%H:%M')}-{woke.strftime('%H:%M')}"
-        out.append({"time": text, "quality": r["quality"]} if r.get("quality") else text)
+        night = {"time": f"{slept.strftime('%H:%M')}-{woke.strftime('%H:%M')}"}
+        if r.get("quality"):
+            night["quality"] = r["quality"]
+        if r.get("sleep_latency_min") is not None:
+            night["latency_min"] = r["sleep_latency_min"]
+        out.append(night if len(night) > 1 else night["time"])
         expected = woke.date() - timedelta(days=1)
         if len(out) == MAX_NIGHTS:
             break
@@ -179,7 +185,7 @@ def load_day(session: Session, transport: Optional[Transport] = None,
         notes.append("기본 정보")
 
     since = now - timedelta(days=MAX_NIGHTS + 1)
-    rows = rest(session, "GET", f"sleep_logs?select=slept_at,woke_at,quality&woke_at=gte.{_q(since)}"
+    rows = rest(session, "GET", f"sleep_logs?select=slept_at,woke_at,quality,sleep_latency_min&woke_at=gte.{_q(since)}"
                 f"&woke_at=lte.{_q(now)}&order=woke_at.asc", **send)
     sleep = rows_to_sleeps(rows) if rows else []
     if sleep:
@@ -205,3 +211,21 @@ def load_day(session: Session, transport: Optional[Transport] = None,
             base["beverage"] = inputs["beverage"]
         notes.append("오늘 목표" if today and rows[0]["plan_date"] == today.isoformat() else "최근 목표")
     return base, notes
+
+
+def add_sleepiness(session: Session, kss: int, note: str = "", transport: Optional[Transport] = None,
+                   real_now: Optional[datetime] = None) -> Dict:
+    """'지금 얼마나 졸려요?' 1~9 (카롤린스카 졸림 척도) — 엔진의 각성도 예측과 비교할 정답 데이터."""
+    at = (real_now or datetime.now(local_tz())).astimezone(local_tz())
+    row = {"at": _ts(at), "kind": "sleepiness", "kss": int(kss), "note": note.strip() or None}
+    return rest(session, "POST", "feedback", row, transport=transport)[0]
+
+
+def today_sleepiness(session: Session, transport: Optional[Transport] = None,
+                     real_now: Optional[datetime] = None) -> List[Dict]:
+    """오늘(한국 시간 0시부터) 남긴 졸림 기록. 서버는 시각을 UTC로 주므로 'time'에 한국 시각을 붙여 준다."""
+    now = (real_now or datetime.now(local_tz())).astimezone(local_tz())
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    rows = rest(session, "GET", f"feedback?select=at,kss,note&kind=eq.sleepiness&at=gte.{_q(midnight)}"
+                f"&order=at.asc", transport=transport)
+    return [{**r, "time": _parse_ts(r["at"]).strftime("%H:%M")} for r in rows]

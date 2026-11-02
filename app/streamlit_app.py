@@ -18,12 +18,13 @@ import yaml
 from account import current_session
 from charts import build_charts, build_frames
 from ntfy import publish, valid_topic
-from store import load_day, save_day
-from forms import (CHRONOTYPE_LABEL, KIND_LABELS, SENSITIVITY_LABEL, intake_list_to_rows, intake_rows_to_list,
-                   sensitivity_from_survey, sleep_list_to_rows, sleep_rows_to_list, to_time, window_list_to_rows,
-                   window_rows_to_list)
+from store import add_sleepiness, load_day, save_day, today_sleepiness
+from forms import (CHRONOTYPE_LABEL, KIND_LABELS, KSS_LABEL, LATENCY_COL, SENSITIVITY_LABEL, beverage_choices,
+                   beverage_spec, intake_list_to_rows, intake_rows_to_list, sensitivity_from_survey, size_label,
+                   sleep_list_to_rows, sleep_rows_to_list, to_time, window_list_to_rows, window_rows_to_list)
 
 from caffeine_engine import params
+from caffeine_engine.convert import load_beverage_db
 from caffeine_engine.notify import current_time_h, plan_notifications, schedule, schedule_test
 from caffeine_engine.pipeline import format_card, run_day
 from caffeine_engine.scenario import from_dict
@@ -35,6 +36,9 @@ SCENARIOS = {yaml.safe_load(p.read_text(encoding="utf-8"))["name"]: p
              for p in sorted((ROOT / "scenarios").glob("*.yaml"))}
 DEFAULT = "시험 날 (23시 취침)"
 PREGNANCY = ["아니오", "임신 초기 (1~3개월)", "임신 중기 (4~6개월)", "임신 후기 (7개월~)"]
+DRINK_DB = load_beverage_db()
+DRINKS = beverage_choices(DRINK_DB)                       # {브랜드: {메뉴: [사이즈별 음료]}}
+DRINK_BY_LABEL = {d.label: d for d in DRINK_DB}
 
 # ── 예시 불러오기: 바꾸면 모든 입력칸을 그 시나리오로 다시 채운다 ──
 if "base" not in st.session_state:
@@ -147,6 +151,9 @@ with left:
                 "잠든 시각": st.column_config.TimeColumn(format="HH:mm", step=900, required=True),
                 "깬 시각": st.column_config.TimeColumn(format="HH:mm", step=900, required=True),
                 "수면 질": st.column_config.NumberColumn(min_value=1, max_value=5, step=1, help="1~5, 비워도 됨"),
+                LATENCY_COL: st.column_config.NumberColumn(
+                    min_value=0, max_value=180, step=5,
+                    help="누워서 잠들 때까지 걸린 시간(분). 계산에는 안 쓰고, 카페인이 잠에 준 영향을 나중에 보는 데 써요"),
             })
         st.markdown("**이미 마신 카페인**")
         intake_df = st.data_editor(
@@ -159,11 +166,29 @@ with left:
             })
         st.markdown("**마시는 음료**")
         bev_spec = base.get("beverage", "coffee")
-        bev_options = ["커피", "홍차", "직접 입력"]
-        bev_index = 2 if isinstance(bev_spec, dict) else (1 if bev_spec == "black_tea" else 0)
+        bev_options = ["커피", "홍차", "메뉴에서 고르기", "직접 입력"]
+        picked = DRINK_BY_LABEL.get(bev_spec.get("db")) if isinstance(bev_spec, dict) else None
+        bev_index = (2 if picked else 3) if isinstance(bev_spec, dict) else (1 if bev_spec == "black_tea" else 0)
         bev_choice = st.radio("음료", bev_options, index=bev_index, horizontal=True, key=key("bev"),
                               label_visibility="collapsed")
-        if bev_choice == "직접 입력":
+        if bev_choice == "메뉴에서 고르기":
+            # 브랜드를 바꾸면 메뉴 목록도 바뀌므로 칸 이름(key)에 브랜드·메뉴를 넣어 따로 기억하게 한다
+            b1, b2 = st.columns(2)
+            brands = list(DRINKS)
+            brand = b1.selectbox("브랜드", brands, index=brands.index(picked.brand) if picked else 0,
+                                 key=key("bev_brand"))
+            menus = list(DRINKS[brand])
+            menu = b2.selectbox("메뉴", menus, key=key(f"bev_menu_{brand}"),
+                                index=menus.index(picked.menu) if picked and picked.brand == brand else 0)
+            sizes = DRINKS[brand][menu]
+            drink = st.selectbox("온도 · 사이즈", sizes, format_func=size_label, key=key(f"bev_size_{brand}_{menu}"),
+                                 index=sizes.index(picked) if picked in sizes else 0)
+            beverage = beverage_spec(drink)
+            st.caption(f"출처: {drink.source_type} · [자료 보기]({drink.source_url})"
+                       + (f" · {drink.note}" if drink.note else ""))
+            if drink.mg > params.value("limits", "daily_mg_adult"):
+                st.warning(f"이 한 잔({drink.mg:g}mg)만으로 성인 하루 권고량을 넘어요. 나눠 마시는 플랜으로 계산해요.")
+        elif bev_choice == "직접 입력":
             spec = bev_spec if isinstance(bev_spec, dict) else {"name": "아메리카노 톨", "mg": 150, "ml": 355}
             b1, b2, b3 = st.columns([2, 1, 1])
             beverage = {"name": b1.text_input("메뉴", spec["name"], key=key("bev_name")),
@@ -271,6 +296,32 @@ with right:
                            "다음에 열면 자동으로 채워져요.")
             except Exception as e:
                 st.error(f"저장하지 못했어요: {e}")
+
+        # ── 매일 피드백: 지금 졸림 (엔진 예측과 비교할 정답 데이터) ──
+        st.divider()
+        st.subheader("📝 지금 얼마나 졸려요?")
+        st.caption("수업·시험처럼 중요한 시간에 남겨 주세요. 예측과 실제를 비교해 나중에 나에게 맞게 보정하는 데 써요. "
+                   "어젯밤 잠드는 데 걸린 시간은 ② 오늘 입력의 수면 표 「잠들기 (분)」 칸에 넣고 저장하세요.")
+        kss = st.select_slider("졸림 (1~9)", options=list(range(1, 10)), value=5, key="kss",
+                               format_func=lambda k: f"{k} · {KSS_LABEL[k]}" if k in KSS_LABEL else str(k))
+        k1, k2 = st.columns([3, 1])
+        kss_note = k1.text_input("메모 (선택)", key="kss_note", placeholder="예: 시험 직전, 커피 2잔째",
+                                 label_visibility="collapsed")
+        if k2.button("기록", width="stretch"):
+            try:
+                add_sleepiness(session, kss, kss_note)
+                st.session_state.pop("kss_today", None)   # 아래 '오늘 기록'을 다시 불러오게
+                st.success(f"기록했어요: {h_to_hhmm(current_time_h())} 즈음 졸림 {kss}")
+            except Exception as e:
+                st.error(f"기록하지 못했어요: {e}")
+        if "kss_today" not in st.session_state:
+            try:
+                st.session_state.kss_today = today_sleepiness(session)
+            except Exception:
+                st.session_state.kss_today = []
+        if st.session_state.kss_today:
+            st.caption("오늘 기록: " + " · ".join(f"{r['time']} → {r['kss']}"
+                                                  for r in st.session_state.kss_today))
 
     top_chart, bottom_chart = build_charts(build_frames(sc, result))
     st.altair_chart(top_chart)
