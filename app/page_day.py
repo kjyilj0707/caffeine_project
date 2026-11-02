@@ -4,6 +4,7 @@ from datetime import time
 import pandas as pd
 import streamlit as st
 
+import calendar_view
 import state
 import store
 from forms import (LATENCY_COL, beverage_choices, beverage_spec, hhmm, size_label, sleep_list_to_rows,
@@ -24,6 +25,17 @@ d = state.data()
 k = state.wkey
 
 st.title("📅 하루 입력")
+
+# ── 달력 보기 (일주일 / 한 달) — 버튼으로 들어가고, 날짜를 누르면 아래 하루 입력으로 돌아온다 ──
+v1, v2, _ = st.columns([1, 1, 2])
+for col, view, label in [(v1, "week", "📆 일주일 보기"), (v2, "month", "🗓 한 달 보기")]:
+    if col.button(label, width="stretch", type="primary" if st.session_state.get("cal_view") == view else "secondary"):
+        st.session_state.cal_view = view
+        st.session_state.cal_anchor = state.selected_day()
+        st.rerun()
+if st.session_state.get("cal_view"):
+    calendar_view.render(st.session_state.cal_view)
+    st.stop()
 
 # ── 날짜 ──
 c1, c2 = st.columns([1, 1.6])
@@ -172,6 +184,7 @@ if st.button("저장하고 추천 보기 →", type="primary", width="stretch"):
             store.save_day(s, sd, d["sex"], result, state.selected_day())
             d["example"] = False
             st.session_state.pop("recorded_days", None)
+            st.session_state.pop("cal_cache", None)      # 달력도 새 기록으로
             st.session_state.just_saved = True
         except Exception as e:
             st.error(f"저장하지 못했어요: {e}")

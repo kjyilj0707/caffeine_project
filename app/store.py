@@ -256,3 +256,34 @@ def today_sleepiness(session: Session, transport: Optional[Transport] = None,
     rows = rest(session, "GET", f"feedback?select=at,kss,note&kind=eq.sleepiness&at=gte.{_q(midnight)}"
                 f"&order=at.asc", transport=transport)
     return [{**r, "time": _parse_ts(r["at"]).strftime("%H:%M")} for r in rows]
+
+
+def range_summary(session: Session, first: date, last: date, transport: Optional[Transport] = None) -> Dict[str, Dict]:
+    """달력용: first~last 날짜마다 {sleep: "01:30~08:00", mg: 마신 총량, plan: 추천 잔 수, kss: 졸림 평균}.
+    마신 것·졸림은 새벽 4시 전이면 전날로 센다 (밤늦게 마신 것도 그날 하루에 포함)."""
+    send = dict(transport=transport)
+    lo, hi = _midnight(first), _midnight(last) + timedelta(days=1)
+    out: Dict[str, Dict] = {}
+
+    def day_of(ts: str, rollover: bool) -> str:
+        t = _parse_ts(ts)
+        return ((t - timedelta(hours=4)) if rollover else t).date().isoformat()
+
+    for r in rest(session, "GET", f"sleep_logs?select=slept_at,woke_at&woke_at=gte.{_q(lo)}&woke_at=lt.{_q(hi)}", **send):
+        out.setdefault(day_of(r["woke_at"], False), {})["sleep"] = \
+            f"{_parse_ts(r['slept_at']).strftime('%H:%M')}~{_parse_ts(r['woke_at']).strftime('%H:%M')}"
+    hi4 = hi + timedelta(hours=4)
+    for r in rest(session, "GET", f"intakes?select=taken_at,mg&taken_at=gte.{_q(lo + timedelta(hours=4))}"
+                  f"&taken_at=lt.{_q(hi4)}", **send):
+        cell = out.setdefault(day_of(r["taken_at"], True), {})
+        cell["mg"] = cell.get("mg", 0) + float(r["mg"])
+    for r in rest(session, "GET", f"plans?select=plan_date,result&plan_date=gte.{first.isoformat()}"
+                  f"&plan_date=lte.{last.isoformat()}&order=created_at.asc", **send):
+        out.setdefault(r["plan_date"], {})["plan"] = len((r.get("result") or {}).get("doses", []))  # 마지막 저장이 남음
+    kss: Dict[str, List[int]] = {}
+    for r in rest(session, "GET", f"feedback?select=at,kss&kind=eq.sleepiness&at=gte.{_q(lo + timedelta(hours=4))}"
+                  f"&at=lt.{_q(hi4)}", **send):
+        kss.setdefault(day_of(r["at"], True), []).append(r["kss"])
+    for d, values in kss.items():
+        out.setdefault(d, {})["kss"] = round(sum(values) / len(values), 1)
+    return out
