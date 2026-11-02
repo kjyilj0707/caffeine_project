@@ -66,7 +66,7 @@ def test_plan_page_shows_doses_first_and_switches_preset():
     assert "추천" in at.title[0].value
     assert any("예시 값" in i.value for i in at.info)                    # 아직 내 정보가 아님을 알려줌
     labels = [e.label.split(" —")[0] for e in at.expander]
-    assert {"📈 그래프로 보기", "📊 자세한 수치", "🔔 핸드폰 알림 받기 (ntfy · 임시)"} <= set(labels)   # 펼쳐 보기
+    assert {"📈 그래프로 보기", "📊 자세한 수치", "🔔 핸드폰 알림 받기 (ntfy 앱 · 로그인 없이)"} <= set(labels)   # 펼쳐 보기
     assert not at.metric or all(m.proto.label for m in at.metric)
     at.sidebar.selectbox[0].set_value("임신 후기 · 민감 (22시 30분 취침)")
     at.sidebar.button[0].click().run()

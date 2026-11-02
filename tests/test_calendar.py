@@ -58,6 +58,8 @@ def test_calendar_buttons_open_and_pick_day(monkeypatch):
     monkeypatch.setattr(store, "load_day", lambda s, day: ({}, []))
     monkeypatch.setattr(store, "recorded_days", lambda s: [])
     monkeypatch.setattr(store, "today_sleepiness", lambda s: [])
+    monkeypatch.setattr(store, "push_devices", lambda s: [])
+    monkeypatch.setattr(store, "scheduled_notifications", lambda s, d: [])
     monkeypatch.setattr(store, "range_summary", lambda s, a, b: {a.isoformat(): {"sleep": "00:00~07:00"}})
     at = AppTest.from_file(str(ROOT / "app" / "streamlit_app.py"), default_timeout=60).run()
     at.switch_page("page_day.py").run()

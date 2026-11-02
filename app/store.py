@@ -287,3 +287,42 @@ def range_summary(session: Session, first: date, last: date, transport: Optional
     for d, values in kss.items():
         out.setdefault(d, {})["kss"] = round(sum(values) / len(values), 1)
     return out
+
+
+# ── 앱 알림 (Step 4-5) ──
+def push_devices(session: Session, transport: Optional[Transport] = None) -> List[Dict]:
+    """알림 받을 기기 목록 (화면 맨 위 '🔔 알림 켜기'로 등록한 기기)."""
+    return rest(session, "GET", "push_subscriptions?select=id,user_agent,created_at&order=created_at.asc",
+                transport=transport)
+
+
+def _day_window(day: date) -> Tuple[datetime, datetime]:
+    """그날 알림 범위: 새벽 4시 ~ 다음 날 새벽 4시 (밤늦게 '금지' 알림도 그날 것)."""
+    start = _midnight(day) + timedelta(hours=4)
+    return start, start + timedelta(days=1)
+
+
+def scheduled_notifications(session: Session, day: date, transport: Optional[Transport] = None) -> List[Dict]:
+    lo, hi = _day_window(day)
+    rows = rest(session, "GET", f"notifications?select=send_at,kind,title,status&send_at=gte.{_q(lo)}"
+                f"&send_at=lt.{_q(hi)}&status=neq.cancelled&order=send_at.asc", transport=transport)
+    return [{**r, "time": _parse_ts(r["send_at"]).strftime("%H:%M")} for r in rows]
+
+
+def schedule_push(session: Session, items, day: date, transport: Optional[Transport] = None) -> int:
+    """그날 아직 안 보낸 플랜 알림을 취소하고 새 알림으로 바꾼다 (추천을 고쳐 다시 눌러도 중복 없음).
+    items: notify.schedule()의 결과 중 보낼 것(send=True)."""
+    lo, hi = _day_window(day)
+    rest(session, "PATCH", f"notifications?status=eq.pending&kind=in.(drink,stop,feedback)"
+         f"&send_at=gte.{_q(lo)}&send_at=lt.{_q(hi)}", {"status": "cancelled"}, transport=transport)
+    rows = [{"send_at": _ts(i.at), "kind": i.notification.kind, "title": i.notification.title,
+             "body": i.notification.message} for i in items]
+    if rows:
+        rest(session, "POST", "notifications", rows, transport=transport)
+    return len(rows)
+
+
+def push_test(session: Session, item, transport: Optional[Transport] = None) -> None:
+    """item: notify.schedule_test()의 결과."""
+    rest(session, "POST", "notifications", {"send_at": _ts(item.at), "kind": "test", "title": item.notification.title,
+                                            "body": item.notification.message}, transport=transport)

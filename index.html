@@ -4,7 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>카페인 측정기</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <!-- 홈 화면에 추가하면 앱처럼 열리고 알림을 받을 수 있게 (아이폰은 홈 화면 앱에서만 알림 가능) -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="카페인" />
+  <meta name="theme-color" content="#6f4e37" />
   <!-- stlite: 브라우저 안에서 Python(Pyodide)으로 Streamlit 앱을 실행 → 서버 없이 GitHub Pages에서 동작 -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/browser@1.11.0/build/stlite.css" />
   <style>
@@ -38,6 +44,7 @@
       <input id="auth-code" inputmode="numeric" pattern="[0-9]{6,10}" placeholder="메일의 숫자 코드" autocomplete="one-time-code" />
       <button type="submit">코드로 로그인</button>
     </form>
+    <button id="push-btn" hidden>🔔 알림 켜기</button>
     <button id="auth-logout" hidden>로그아웃</button>
     <span id="auth-msg"></span>
   </div>
@@ -93,7 +100,84 @@
       });
       if (error) $("auth-msg").textContent = `⚠️ ${error.message}`;
     });
-    $("auth-logout").addEventListener("click", () => supabase.auth.signOut());
+    $("auth-logout").addEventListener("click", async () => {
+      await removeThisDevice();   // 로그아웃한 기기로는 알림을 보내지 않게
+      supabase.auth.signOut();
+    });
+
+    // ── 알림 (Step 4-5): 이 기기를 알림 받을 기기로 등록 ──
+    // 서버(send-push)가 이 공개 키로 서명한 알림만 이 기기가 받는다. 비밀 키는 서버에만 있다.
+    const VAPID_PUBLIC_KEY = "BBc1naBjXI25fPC_0StoymAffFsflFIx8ltaYZnCsgzlH2va1FBHgBt6r39OcbAwV41QkHOAK3dlfKqdeZrAsYk";
+    const pushSupported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    const swReady = pushSupported ? navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready)
+                                  : null;
+
+    const keyBytes = (b64) => {
+      const raw = atob((b64 + "=".repeat((4 - b64.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
+      return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+    };
+
+    async function saveSubscription(sub) {
+      const j = sub.toJSON();
+      const { error } = await supabase.from("push_subscriptions").upsert(
+        { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, user_agent: navigator.userAgent },
+        { onConflict: "endpoint" });
+      if (error) throw error;
+    }
+
+    async function removeThisDevice() {
+      if (!swReady) return;
+      const sub = await (await swReady).pushManager.getSubscription();
+      if (sub) await supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
+    }
+
+    async function showPush(session) {
+      const btn = $("push-btn");
+      btn.hidden = !session;
+      if (!session) return;
+      if (!pushSupported) {
+        btn.textContent = isIOS ? "📱 알림 받는 법" : "🔕 이 브라우저는 알림 불가";
+        return;
+      }
+      if (Notification.permission === "denied") { btn.textContent = "🔕 알림 차단됨"; return; }
+      const sub = await (await swReady).pushManager.getSubscription();
+      if (sub) {
+        btn.textContent = "🔔 알림 켜짐";
+        saveSubscription(sub).catch(() => {});   // 다른 계정으로 바뀌었거나 서버에서 지워졌을 때 다시 등록
+      } else {
+        btn.textContent = "🔔 알림 켜기";
+      }
+    }
+
+    $("push-btn").addEventListener("click", async () => {
+      if (!pushSupported) {
+        $("auth-msg").textContent = isIOS
+          ? "📱 아이폰: 사파리 아래 [공유] → [홈 화면에 추가] → 홈 화면의 '카페인' 앱을 열고 로그인한 뒤 여기서 알림을 켜 주세요 (iOS 16.4 이상)."
+          : "이 브라우저는 알림을 지원하지 않아요. 크롬이나 사파리 최신 버전에서 열어 주세요.";
+        return;
+      }
+      if (Notification.permission === "denied") {
+        $("auth-msg").textContent = "알림이 차단돼 있어요. 주소창 왼쪽 자물쇠(또는 설정) → 알림 → 허용으로 바꾼 뒤 새로고침해 주세요.";
+        return;
+      }
+      try {
+        $("auth-msg").textContent = "알림 허용을 물어보면 [허용]을 눌러 주세요…";
+        if (await Notification.requestPermission() !== "granted") {
+          $("auth-msg").textContent = "알림이 허용되지 않았어요.";
+          return showPush(session);
+        }
+        const reg = await swReady;
+        const sub = await reg.pushManager.getSubscription()
+          || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) });
+        await saveSubscription(sub);
+        $("auth-msg").textContent = "✅ 이 기기에서 알림을 받을 수 있어요. 추천 화면에서 「1분 뒤 테스트 알림」으로 확인해 보세요.";
+      } catch (e) {
+        $("auth-msg").textContent = `⚠️ 알림을 켜지 못했어요: ${e.message ?? e}`;
+      }
+      showPush(session);
+    });
+    showPush(session);
 
     // 저장소의 파일을 그대로 가져와 브라우저 속 Python에 넣는다.
     // 파일을 추가하면 이 목록에도 추가할 것 (tests/test_pages.py가 빠진 파일을 잡아낸다)

@@ -19,7 +19,7 @@ from .timeutil import h_to_hhmm
 @dataclass(frozen=True)
 class Notification:
     time_h: float          # 엔진 시각
-    kind: str              # drink / stop / test
+    kind: str              # drink / stop / test / feedback
     title: str
     message: str
     tags: tuple = ()
@@ -65,6 +65,13 @@ def plan_notifications(plan: Plan, servings: Sequence[Serving], bed_h: float) ->
             message=f"{h_to_hhmm(bed_h)} 취침 · 수면 보호를 위해 한 모금도 마시지 마세요",
             tags=("no_entry",), priority=3))
     return sorted(out, key=lambda n: n.time_h)
+
+
+def feedback_notifications(windows) -> List[Notification]:
+    """📝 '졸면 안 되는 시간' 한가운데에 '지금 얼마나 졸려요?' — 예측과 실제를 비교할 정답 데이터 모으기."""
+    return [Notification(time_h=(w.start_h + w.end_h) / 2, kind="feedback", title="📝 지금 얼마나 졸려요?",
+                         message="앱을 열어 1~9점으로 남겨 주세요 (10초)", tags=("memo",), priority=3)
+            for w in windows if w.kind == "must_not_sleep"]
 
 
 def make_test_notification(now_h: float, minutes: int = 1) -> Notification:

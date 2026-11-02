@@ -129,6 +129,8 @@ def _app(monkeypatch, saved, notes=("프로필",)):
     monkeypatch.setattr(store, "save_day", lambda *a: calls["save"].append(a) or {"nights": 1, "intakes": 0})
     monkeypatch.setattr(store, "save_profile", lambda *a: calls["save"].append(a))
     monkeypatch.setattr(store, "add_sleepiness", lambda s, k, n: calls["kss"].append((k, n)))
+    monkeypatch.setattr(store, "push_devices", lambda s: [])              # 실제 서버에 묻지 않게
+    monkeypatch.setattr(store, "scheduled_notifications", lambda s, d: [])
     return AppTest.from_file(str(ROOT / "app" / "streamlit_app.py"), default_timeout=60).run(), calls
 
 
@@ -178,3 +180,40 @@ def test_app_day_without_sleep_asks_for_it(monkeypatch):
     at, _ = _app(monkeypatch, saved)
     assert not at.exception
     assert any("잠 기록이 없어요" in w.value for w in at.warning)
+
+
+def test_feedback_notification_in_middle_of_must_not_sleep():
+    from caffeine_engine.notify import feedback_notifications
+    sc = from_dict(exam_day())                                  # 졸면 안 됨 14:00~17:00
+    notes = feedback_notifications(sc.windows)
+    assert [(n.kind, n.time_h) for n in notes] == [("feedback", 15.5)]
+
+
+def test_schedule_push_cancels_then_inserts():
+    from caffeine_engine.notify import Notification, Scheduled
+    fake = FakeServer()
+    at = datetime(2026, 11, 2, 13, 45, tzinfo=KST)
+    items = [Scheduled(Notification(13.75, "drink", "☕ 13:45 커피 8모금", "약 60mg"), at, True)]
+    assert store.schedule_push(SESSION, items, date(2026, 11, 2), transport=fake) == 1
+    (m1, p1, b1, _), (m2, p2, b2, _) = fake.calls
+    assert m1 == "PATCH" and b1 == {"status": "cancelled"} and "status=eq.pending" in p1
+    assert "send_at=gte.2026-11-02T04%3A00%3A00%2B09%3A00" in p1      # 그날 새벽 4시 ~ 다음 날 새벽 4시
+    assert m2 == "POST" and b2 == [{"send_at": "2026-11-02T13:45:00+09:00", "kind": "drink",
+                                    "title": "☕ 13:45 커피 8모금", "body": "약 60mg"}]
+
+
+def test_app_push_section(monkeypatch):
+    at, calls = _app(monkeypatch, SAVED)
+    monkeypatch.setattr(store, "push_devices", lambda s: [])
+    monkeypatch.setattr(store, "scheduled_notifications", lambda s, d: [])
+    at.run()
+    assert any("알림 켜기" in i.value for i in at.info)                  # 기기 없으면 켜는 법 안내
+    pushed = []
+    monkeypatch.setattr(store, "push_devices", lambda s: [{"id": 1}])
+    monkeypatch.setattr(store, "push_test", lambda s, item: pushed.append(item))
+    next(b for b in at.button if b.label == "알림 켰어요 — 다시 확인").click().run()
+    assert not at.exception
+    assert any("기기 1대" in c.value for c in at.caption)
+    next(b for b in at.button if b.label == "1분 뒤 테스트 알림").click().run()
+    assert not at.exception and pushed and pushed[0].notification.kind == "test"
+    assert not any("ntfy" in e.label for e in at.expander)             # 로그인하면 ntfy 대신 앱 알림
