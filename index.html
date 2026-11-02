@@ -129,7 +129,8 @@
         requirements: ["pyyaml"],
         entrypoint: "app/streamlit_app.py",
         files: {
-          ...Object.fromEntries(FILES.map((path) => [path, { url: path }])),
+          // ?v=… : 브라우저가 예전 파일을 기억해 두고 쓰지 않게 매번 새로 받는다 (파일이 작아 부담 없음)
+          ...Object.fromEntries(FILES.map((path) => [path, { url: `${path}?v=${Date.now()}` }])),
           [SESSION_FILE]: { data: sessionData(session) },
         },
         streamlitConfig: { "client.toolbarMode": "viewer" },  // 개발자용 Deploy 버튼 숨김
