@@ -65,11 +65,14 @@ def default_transport() -> Transport:
     return _send_browser if sys.platform == "emscripten" else _send_cpython
 
 
-def rest(session: Session, method: str, path: str, body=None, transport: Optional[Transport] = None):
+def rest(session: Session, method: str, path: str, body=None, transport: Optional[Transport] = None,
+         prefer: Optional[str] = None):
     """서버 표 읽기·쓰기 (PostgREST). 예: rest(s, "GET", "profiles?select=*")
-    로그인한 사람의 열쇠로 요청하므로 RLS 규칙에 따라 자기 행만 보인다."""
+    로그인한 사람의 열쇠로 요청하므로 RLS 규칙에 따라 자기 행만 보인다.
+    prefer: 추가 요청 방식. 예: "resolution=merge-duplicates" (있으면 고치고 없으면 넣기)"""
     headers = {"apikey": session.key, "Authorization": f"Bearer {session.access_token}",
-               "Content-Type": "application/json", "Prefer": "return=representation"}
+               "Content-Type": "application/json",
+               "Prefer": ",".join(filter(None, ["return=representation", prefer]))}
     data = json.dumps(body, ensure_ascii=False) if body is not None else None
     status, text = (transport or default_transport())(method, f"{session.url}/rest/v1/{path}", headers, data)
     if not 200 <= status < 300:

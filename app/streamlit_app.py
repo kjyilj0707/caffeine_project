@@ -1,4 +1,4 @@
-"""☕ 카페인 측정기 — 입력 화면 (Step 2) + 알림 예약 (Step 3) + 로그인 상태 (Step 4)
+"""☕ 카페인 측정기 — 입력 화면 (Step 2) + 알림 예약 (Step 3) + 로그인·기록 저장 (Step 4)
 
 실행: .venv/bin/streamlit run app/streamlit_app.py
 왼쪽에서 ① 기본 정보 ② 오늘 입력 ③ 목표를 넣으면 오른쪽에 플랜·지표·그래프가 바로 나오고,
@@ -15,9 +15,10 @@ import pandas as pd
 import streamlit as st
 import yaml
 
-from account import current_session, rest
+from account import current_session
 from charts import build_charts, build_frames
 from ntfy import publish, valid_topic
+from store import load_day, save_day
 from forms import (CHRONOTYPE_LABEL, KIND_LABELS, SENSITIVITY_LABEL, intake_list_to_rows, intake_rows_to_list,
                    sensitivity_from_survey, sleep_list_to_rows, sleep_rows_to_list, to_time, window_list_to_rows,
                    window_rows_to_list)
@@ -49,18 +50,32 @@ with st.sidebar:
     st.caption("※ 의학적 조언이 아니에요. 평균적인 성인 기준 예측입니다.")
 
     # ── 로그인 상태 (로그인은 화면 맨 위 바에서 — index.html) ──
+    # 로그인했으면 처음 한 번 저장된 기록으로 입력칸을 채운다 (없는 항목은 예시값 그대로)
     st.divider()
     session = current_session()
     if session is None:
-        st.caption("☁️ 로그인 안 됨 — 화면 맨 위에서 이메일로 로그인할 수 있어요.")
+        st.caption("☁️ 로그인 안 됨 — 화면 맨 위에서 이메일로 로그인하면 입력을 저장할 수 있어요.")
     else:
         st.caption(f"☁️ {session.email} 로그인됨")
-        if st.button("서버 연결 확인", width="stretch"):
+        if st.session_state.get("loaded_for") != session.user_id:
+            st.session_state.loaded_for = session.user_id
             try:
-                rows = rest(session, "GET", "profiles?select=user_id")
-                st.success(f"서버 연결 OK — 내 기본 정보 {len(rows)}건 (다른 사람 것은 안 보여요)")
-            except Exception as e:  # 화면에 원인을 그대로 보여줘 테스트 때 바로 알 수 있게
-                st.error(f"서버 연결 실패: {e}")
+                saved, st.session_state.load_notes = load_day(session)
+            except Exception as e:  # 원인을 화면에 그대로 보여줘 바로 알 수 있게
+                saved, st.session_state.load_notes = {}, None
+                st.error(f"저장된 기록을 불러오지 못했어요: {e}")
+            if saved:
+                merged = dict(st.session_state.base)
+                merged.update({k: v for k, v in saved.items() if k != "today"})
+                merged["today"] = {**merged.get("today", {}), **saved.get("today", {}),
+                                   "now": h_to_hhmm(current_time_h())}
+                st.session_state.base = merged
+                st.session_state.version += 1
+        load_notes = st.session_state.get("load_notes")
+        if load_notes:
+            st.caption("불러온 기록: " + " · ".join(load_notes))
+        elif load_notes is not None:
+            st.caption("저장된 기록이 없어요. 입력하고 「☁️ 저장」을 누르면 다음부터 자동으로 채워져요.")
 
 base, v = st.session_state.base, st.session_state.version
 prof, today = base.get("profile", {}), base.get("today", {})
@@ -80,8 +95,8 @@ with left:
         age = c1.number_input("나이", 10, 100, int(prof.get("age", 24)), key=key("age"))
         weight = c2.number_input("몸무게 (kg)", 30.0, 200.0, float(prof.get("weight_kg", 70)), 0.5,
                                  key=key("weight"))
-        female_default = bool(prof.get("pregnancy_trimester") or prof.get("oral_contraceptive")
-                              or prof.get("breastfeeding"))
+        female_default = base["sex"] == "여성" if "sex" in base else bool(
+            prof.get("pregnancy_trimester") or prof.get("oral_contraceptive") or prof.get("breastfeeding"))
         sex = st.radio("성별", ["남성", "여성"], index=int(female_default), horizontal=True, key=key("sex"))
         smoker = st.checkbox("흡연", bool(prof.get("smoker")), key=key("smoker"),
                              help="흡연하면 카페인이 더 빨리 분해돼요")
@@ -246,6 +261,16 @@ with right:
 
     for note in result.notes:
         st.warning(note)
+
+    if session is not None:
+        if st.button("☁️ 오늘 입력·플랜 저장", type="primary",
+                     help="기본 정보 · 최근 수면 · 오늘 마신 것 · 목표 · 이 플랜을 저장해요. 다시 누르면 고친 내용으로 바뀌어요"):
+            try:
+                n = save_day(session, scenario_dict, sex, result)
+                st.success(f"저장했어요 — 기본 정보 · 수면 {n['nights']}밤 · 마신 것 {n['intakes']}건 · 목표 · 플랜. "
+                           "다음에 열면 자동으로 채워져요.")
+            except Exception as e:
+                st.error(f"저장하지 못했어요: {e}")
 
     top_chart, bottom_chart = build_charts(build_frames(sc, result))
     st.altair_chart(top_chart)

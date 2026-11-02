@@ -5,6 +5,7 @@
         잠든 시각이 깬 시각보다 늦으면(예: 23:30-07:00) 전날 밤으로 본다.
   오늘: 오늘 일어난 시각(어젯밤 기록의 깬 시각)보다 이른 시각은 다음 날(자정 넘김)로 본다.
         예: 08:00 기상이면 bed 01:00 → 다음 날 01:00, 시간대 23:00-01:00 → 23시~다음 날 1시
+        단, 기상 전에 시작해 기상 후에 끝나는 시간대(08:30 기상, 08:00-23:00)는 기상 시각부터로 본다.
 """
 from dataclasses import dataclass
 from pathlib import Path
@@ -79,7 +80,10 @@ def from_dict(data: dict) -> Scenario:
     windows = []
     for w in today.get("windows", []):
         start, end = _today(w["from"], wake), _today(w["to"], wake)
-        windows.append(Window(start, end, KIND_NAMES[w["kind"]]))
+        if start > end:  # 기상 전에 시작한 시간대 (예: 08:30 기상, 08:00-23:00) → 일어난 때부터
+            start = max(start - 24, wake)
+        if start < end:
+            windows.append(Window(start, end, KIND_NAMES[w["kind"]]))
 
     already = []
     for a in today.get("already", []):
