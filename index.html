@@ -29,27 +29,39 @@
     #auth-bar button { font: inherit; padding: 5px 10px; border: 1px solid #c9c9c4; border-radius: 6px;
                        background: #fff; cursor: pointer; }
     #auth-msg { color: #52514e; }
+    #auth-bar form { flex-wrap: wrap; }
+    #auth-bar input { width: 9.5em; }
+    #auth-bar button.link { border: 0; background: none; color: #2e7d32; text-decoration: underline; padding: 5px 2px; }
     [hidden] { display: none !important; }
   </style>
 </head>
 <body>
   <!-- 로그인 바: 로그인은 자바스크립트(supabase-js)가 하고, 결과를 브라우저 속 Python에 파일로 넘긴다 -->
   <div id="auth-bar">
-    <span id="auth-status">☁️ 로그인 확인 중…</span>
+    <span id="auth-status">로그인 확인 중…</span>
+    <!-- 간편 로그인: 이메일 + 비밀번호. 처음이면 [회원가입] (확인 메일 한 번), 비밀번호가 없거나 잊었으면 [메일 코드로] -->
     <form id="auth-email-form" hidden>
       <input id="auth-email" type="email" required placeholder="이메일" autocomplete="email" />
-      <button type="submit">로그인 링크 받기</button>
+      <input id="auth-password" type="password" placeholder="비밀번호" autocomplete="current-password" minlength="6" />
+      <button type="submit">로그인</button>
+      <button type="button" id="auth-signup">회원가입</button>
+      <button type="button" id="auth-otp" class="link">메일 코드로</button>
     </form>
+    <form id="auth-setpw-form" hidden>
+      <input id="auth-newpw" type="password" required minlength="6" placeholder="새 비밀번호 (6자 이상)" autocomplete="new-password" />
+      <button type="submit">비밀번호 저장</button>
+    </form>
+    <button id="auth-setpw" hidden>비밀번호 설정</button>
     <form id="auth-code-form" hidden>
       <input id="auth-code" inputmode="numeric" pattern="[0-9]{6,10}" placeholder="메일의 숫자 코드" autocomplete="one-time-code" />
       <button type="submit">코드로 로그인</button>
     </form>
-    <button id="push-btn" hidden>🔔 알림 켜기</button>
+    <button id="push-btn" hidden>알림 켜기</button>
     <button id="auth-logout" hidden>로그아웃</button>
     <span id="auth-msg"></span>
   </div>
   <div id="root">
-    <p id="loading">☕ 카페인 측정기를 불러오는 중이에요. 처음엔 10~20초 걸려요…</p>
+    <p id="loading">카페인 측정기를 불러오는 중이에요. 처음엔 10~20초 걸려요…</p>
   </div>
   <script type="module">
     import { mount } from "https://cdn.jsdelivr.net/npm/@stlite/browser@1.11.0/build/stlite.js";
@@ -72,33 +84,76 @@
     } : {});
 
     function showAuth(session) {
-      $("auth-status").textContent = session ? `☁️ ${session.user.email} 로그인됨` : "☁️ 로그인하면 입력을 저장하고 다음에 불러올 수 있어요";
+      $("auth-status").textContent = session ? `${session.user.email} 로그인됨` : "로그인하면 입력을 저장하고 다음에 불러올 수 있어요";
       $("auth-email-form").hidden = !!session;
       $("auth-logout").hidden = !session;
+      $("auth-setpw").hidden = !session;
       if (session) { $("auth-code-form").hidden = true; $("auth-msg").textContent = ""; }
+      // 비밀번호 재설정 메일로 돌아왔거나, 코드로 처음 들어온 사람에게 비밀번호 설정 칸을 바로 보여준다
+      if (session && (new URLSearchParams(location.search).has("reset") || sessionStorage.getItem("askPassword"))) {
+        sessionStorage.removeItem("askPassword");
+        $("auth-setpw-form").hidden = false;
+        $("auth-msg").textContent = "다음부터 간편하게 로그인하도록 비밀번호를 정해 주세요.";
+      }
     }
+    const redirect = location.origin + location.pathname;
 
     // 메일 링크로 돌아온 경우 주소에 담긴 로그인 정보를 여기서 처리한다
     const { data: { session } } = await supabase.auth.getSession();
     showAuth(session);
 
+    const KO = { "Invalid login credentials": "이메일 또는 비밀번호가 맞지 않아요. 비밀번호를 정한 적이 없으면 [메일 코드로]를 눌러 주세요.",
+                 "Email not confirmed": "가입 확인 메일의 링크를 먼저 눌러 주세요.",
+                 "User already registered": "이미 가입된 이메일이에요. [로그인] 또는 [메일 코드로]를 써 주세요." };
+    const say = (error) => { $("auth-msg").textContent = KO[error.message] ?? error.message; };
+
+    // 로그인: 이메일 + 비밀번호
     $("auth-email-form").addEventListener("submit", async (e) => {
       e.preventDefault();
+      const email = $("auth-email").value.trim(), password = $("auth-password").value;
+      if (!password) { $("auth-msg").textContent = "비밀번호를 넣어 주세요. 처음이면 [회원가입], 비밀번호가 없으면 [메일 코드로]."; return; }
+      $("auth-msg").textContent = "로그인 중…";
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) say(error);
+    });
+    // 회원가입: 이메일 확인 한 번 → 그다음부터는 비밀번호로
+    $("auth-signup").addEventListener("click", async () => {
+      const email = $("auth-email").value.trim(), password = $("auth-password").value;
+      if (!email || password.length < 6) { $("auth-msg").textContent = "이메일과 비밀번호(6자 이상)를 넣고 [회원가입]을 눌러 주세요."; return; }
+      $("auth-msg").textContent = "가입 중…";
+      const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: redirect } });
+      if (error) return say(error);
+      if (data.user && data.user.identities && data.user.identities.length === 0)
+        return say({ message: "User already registered" });
+      $("auth-msg").textContent = data.session ? "가입했어요." : "확인 메일을 보냈어요. 메일의 링크를 누르면 가입이 끝나요 (한 번만). 그다음부터는 비밀번호로 로그인해요.";
+    });
+    // 메일 코드로 로그인 (비밀번호가 없거나 잊었을 때) → 들어온 뒤 비밀번호를 정하게 한다
+    $("auth-otp").addEventListener("click", async () => {
       const email = $("auth-email").value.trim();
+      if (!email) { $("auth-msg").textContent = "이메일을 넣고 [메일 코드로]를 눌러 주세요."; return; }
       $("auth-msg").textContent = "보내는 중…";
-      const { error } = await supabase.auth.signInWithOtp({
-        email, options: { emailRedirectTo: location.origin + location.pathname },
-      });
-      if (error) { $("auth-msg").textContent = `⚠️ ${error.message}`; return; }
-      $("auth-msg").textContent = "📧 메일을 보냈어요. 메일의 링크를 누르거나, 숫자 코드가 있으면 입력하세요.";
+      sessionStorage.setItem("askPassword", "1");
+      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect + "?reset=1", shouldCreateUser: false } });
+      if (error) { sessionStorage.removeItem("askPassword"); return say(error); }
+      $("auth-msg").textContent = "메일을 보냈어요. 메일의 링크를 누르거나, 숫자 코드를 입력하세요.";
       $("auth-code-form").hidden = false;
+    });
+    // 비밀번호 설정·변경 (로그인한 상태에서)
+    $("auth-setpw").addEventListener("click", () => { $("auth-setpw-form").hidden = !$("auth-setpw-form").hidden; });
+    $("auth-setpw-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const { error } = await supabase.auth.updateUser({ password: $("auth-newpw").value });
+      if (error) return say(error);
+      $("auth-setpw-form").hidden = true; $("auth-newpw").value = "";
+      $("auth-msg").textContent = "비밀번호를 저장했어요. 다음부터는 이메일 + 비밀번호로 로그인해요.";
+      if (location.search.includes("reset")) history.replaceState(null, "", location.pathname);
     });
     $("auth-code-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const { error } = await supabase.auth.verifyOtp({
         email: $("auth-email").value.trim(), token: $("auth-code").value.trim(), type: "email",
       });
-      if (error) $("auth-msg").textContent = `⚠️ ${error.message}`;
+      if (error) $("auth-msg").textContent = `${error.message}`;
     });
     $("auth-logout").addEventListener("click", async () => {
       await removeThisDevice();   // 로그아웃한 기기로는 알림을 보내지 않게
@@ -137,23 +192,23 @@
       btn.hidden = !session;
       if (!session) return;
       if (!pushSupported) {
-        btn.textContent = isIOS ? "📱 알림 받는 법" : "🔕 이 브라우저는 알림 불가";
+        btn.textContent = isIOS ? "알림 받는 법" : "이 브라우저는 알림 불가";
         return;
       }
-      if (Notification.permission === "denied") { btn.textContent = "🔕 알림 차단됨"; return; }
+      if (Notification.permission === "denied") { btn.textContent = "알림 차단됨"; return; }
       const sub = await (await swReady).pushManager.getSubscription();
       if (sub) {
-        btn.textContent = "🔔 알림 켜짐";
+        btn.textContent = "알림 켜짐";
         saveSubscription(sub).catch(() => {});   // 다른 계정으로 바뀌었거나 서버에서 지워졌을 때 다시 등록
       } else {
-        btn.textContent = "🔔 알림 켜기";
+        btn.textContent = "알림 켜기";
       }
     }
 
     $("push-btn").addEventListener("click", async () => {
       if (!pushSupported) {
         $("auth-msg").textContent = isIOS
-          ? "📱 아이폰: 사파리 아래 [공유] → [홈 화면에 추가] → 홈 화면의 '카페인' 앱을 열고 로그인한 뒤 여기서 알림을 켜 주세요 (iOS 16.4 이상)."
+          ? "아이폰: 사파리 아래 [공유] → [홈 화면에 추가] → 홈 화면의 '카페인' 앱을 열고 로그인한 뒤 여기서 알림을 켜 주세요 (iOS 16.4 이상)."
           : "이 브라우저는 알림을 지원하지 않아요. 크롬이나 사파리 최신 버전에서 열어 주세요.";
         return;
       }
@@ -171,9 +226,9 @@
         const sub = await reg.pushManager.getSubscription()
           || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) });
         await saveSubscription(sub);
-        $("auth-msg").textContent = "✅ 이 기기에서 알림을 받을 수 있어요. 추천 화면에서 「1분 뒤 테스트 알림」으로 확인해 보세요.";
+        $("auth-msg").textContent = "이 기기에서 알림을 받을 수 있어요. 추천 화면에서 「1분 뒤 테스트 알림」으로 확인해 보세요.";
       } catch (e) {
-        $("auth-msg").textContent = `⚠️ 알림을 켜지 못했어요: ${e.message ?? e}`;
+        $("auth-msg").textContent = `알림을 켜지 못했어요: ${e.message ?? e}`;
       }
       showPush(session);
     });
@@ -190,6 +245,14 @@
       "app/calendar_view.py",
       "app/report.py",
       "app/page_report.py",
+      "app/page_drinks.py",
+      "app/page_feedback.py",
+      "app/tabbar.py",
+      "app/timer_view.py",
+      "app/report_cards.py",
+      "app/theme.py",
+      "app/dial.py",
+      "app/components/dial/index.html",
       "app/forms.py",
       "app/charts.py",
       "app/ntfy.py",
@@ -208,6 +271,7 @@
       "caffeine_engine/pipeline.py",
       "caffeine_engine/scenario.py",
       "caffeine_engine/notify.py",
+      "caffeine_engine/calibration.py",
       "parameters.yaml",
       "beverages.yaml",
       "scenarios/exam_day.yaml",
@@ -225,7 +289,8 @@
           ...Object.fromEntries(FILES.map((path) => [path, { url: `${path}?v=${Date.now()}` }])),
           [SESSION_FILE]: { data: sessionData(session) },
         },
-        streamlitConfig: { "client.toolbarMode": "viewer" },  // 개발자용 Deploy 버튼 숨김
+        // 개발자용 Deploy 버튼 숨김. 강조색(초록)은 app/theme.py의 CSS로 — 테마 설정을 넣으면 다크/라이트 선택이 무시됨
+        streamlitConfig: { "client.toolbarMode": "viewer" },
       },
       document.getElementById("root"),
     );

@@ -237,3 +237,43 @@ metrics:  # 지표 계산용
     value: [0.8, 1.0]
     source: "설계서 지표 7 (상한의 80%·100%에서 경고)"
     status: provisional
+
+calibration:  # Step 5 개인화 ① — 엔진 예측과 실제 기록 비교 (아직 추천에는 반영하지 않음)
+  kss_from_alertness:
+    value: {intercept: 10.6, slope: -0.6}
+    source: "Ingre 2014 PLOS ONE 9(10):e108679 식 1.9 — 3-프로세스 모델 기본 변환 KSS = 10.6 − 0.6 × 각성 점수 (원문 문장 확인)"
+    status: confirmed
+  min_kss_records:
+    value: 10
+    source: "설계값: 졸림 기록이 이만큼 쌓여야 '모델과 얼마나 다른지'를 보여줌"
+    status: provisional
+  meaningful_kss_bias:
+    value: 1.0
+    source: "설계값: 평균 차이가 KSS 1점 이상이면 '모델과 다름'으로 안내"
+    status: provisional
+  min_nights_per_group:
+    value: 3
+    source: "설계값: 잠들 때 몸속 카페인 많은 밤·적은 밤이 각각 3일 이상이어야 잠들기 시간을 비교"
+    status: provisional
+
+pacing:  # 나눠 마시기 — 한 잔을 정해진 시간 동안 조금씩 마신다고 보고 계산
+  durations_h:
+    value: [0.25, 0.5, 1.0, 2.0]
+    source: "설계값: 15분(보통 속도) · 30분 · 1시간 · 2시간 중 고름"
+    status: provisional
+  default_h:
+    value: 0.5
+    source: "설계값: 다른 속도가 뚜렷하게 낫지 않으면 30분"
+    status: provisional
+  min_gain:
+    value: 0.01
+    source: "설계값: 벌점이 1% 넘게 줄어야 기본 속도 대신 다른 속도를 고름"
+    status: provisional
+  piece_interval_min:
+    value: 10
+    source: "설계값: 나눠 마시기를 10분마다 같은 양을 마시는 것으로 근사 (모델은 한 번에 마시는 용량으로 만들어짐)"
+    status: provisional
+  rationale:
+    value: "저용량을 나눠 섭취하면 한 번에 큰 용량보다 각성을 고르게 유지"
+    source: "Wyatt 2004 (Sleep 27:374, 시간당 0.3mg/kg 반복) — 방향 근거, 원문 수치 확인 전"
+    status: provisional

@@ -1,6 +1,6 @@
 """여러 페이지가 함께 쓰는 입력 상태 · 계산 · 서버 불러오기 (Step 4 화면 개편).
 
-페이지(👤 프로필 · 📅 하루 입력 · ☕ 추천)를 옮겨 다니면 Streamlit은 안 보이는 페이지의 입력칸을 지운다.
+페이지(프로필 · 하루 입력 · 추천)를 옮겨 다니면 Streamlit은 안 보이는 페이지의 입력칸을 지운다.
 그래서 입력값은 모두 st.session_state["data"] 한 곳에 두고, 각 페이지는 칸을 그릴 때 여기서 읽고
 바뀌면 여기에 다시 쓴다. 서버에서 불러오거나 예시를 고르면 version을 올려 모든 칸을 새 값으로 다시 만든다.
 
@@ -30,7 +30,8 @@ ROOT = Path(__file__).resolve().parent.parent
 SCENARIOS = {yaml.safe_load(p.read_text(encoding="utf-8"))["name"]: p
              for p in sorted((ROOT / "scenarios").glob("*.yaml"))}
 DEFAULT = "시험 날 (23시 취침)"
-DAY_ROLLOVER_H = 4   # 새벽 4시 전에는 아직 '어제 하루'로 본다 (밤늦게 쓰는 경우)
+DAY_ROLLOVER_H = 4   # (저장·리포트의 하루 묶음 기준. 화면이 여는 날짜는 아래 default_day가 잘 시각으로 정함)
+DEFAULT_BED = "23:00"
 WEEKDAY = "월화수목금토일"
 
 
@@ -38,9 +39,30 @@ def kst_now() -> datetime:
     return datetime.now(local_tz())
 
 
+def bed_hours(bed: str) -> float:
+    """잘 시각 → 그날 0시부터 시간. 정오 전 시각(01:00)은 다음 날 새벽(25.0)으로 본다."""
+    h = hhmm_to_h(bed)
+    return h + 24 if h < 12 else h
+
+
+def day_for(now: datetime, bed: str) -> date:
+    """사용자의 잘 시각을 기준으로 '지금은 어느 날 아침의 하루인가'.
+    잘 시각이 지나면 다음 날 아침으로 넘어간다. 예) 잘 시각 23:00 → 23:30부터는 내일 / 01:00 → 00:30은 아직 어제."""
+    bed_h = bed_hours(bed)
+    midnight = datetime(now.year, now.month, now.day, tzinfo=now.tzinfo)
+    h = (now - midnight).total_seconds() / 3600
+    if bed_h >= 24:                       # 자정 넘어 자는 사람: 그 시각 전 새벽은 아직 어제
+        return now.date() - timedelta(days=1) if h < bed_h - 24 else now.date()
+    return now.date() + timedelta(days=1) if h >= bed_h else now.date()
+
+
+def user_bed() -> str:
+    d = st.session_state.get("data") or {}
+    return (d.get("today") or {}).get("bed") or DEFAULT_BED
+
+
 def default_day() -> date:
-    now = kst_now()
-    return (now - timedelta(hours=DAY_ROLLOVER_H)).date()
+    return day_for(kst_now(), user_bed())
 
 
 def day_label(d: date) -> str:
@@ -128,10 +150,24 @@ def load(day: date) -> None:
 
 
 def ensure_loaded() -> None:
-    """페이지를 열 때마다 부르고, 로그인한 사람·날짜가 바뀌었을 때만 실제로 불러온다."""
+    """페이지를 열 때마다 부르고, 로그인한 사람·날짜가 바뀌었을 때만 실제로 불러온다.
+    처음 불러온 뒤에는 그 사람의 잘 시각으로 '오늘'을 다시 정해, 날짜가 바뀌면 그날로 다시 불러온다."""
     s = session()
     if st.session_state.get("loaded") != (s.user_id if s else None, data()["day"]):
+        first = "loaded" not in st.session_state or (st.session_state.loaded or (None,))[0] != (s.user_id if s else None)
         load(selected_day())
+        if first and s is not None and default_day() != selected_day():
+            load(default_day())
+
+
+def needs_morning_input() -> bool:
+    """세션에서 처음 화면을 열 때 한 번만: 로그인했고, 오늘(잘 시각 기준) 아침 잠 기록이 아직 없으면 True
+    → 하루 입력 화면을 먼저 띄운다."""
+    if st.session_state.get("landed"):
+        return False
+    st.session_state.landed = True
+    d = data()
+    return session() is not None and not d["example"] and selected_day() == default_day() and d.get("last_night") is None
 
 
 def recorded_days():
@@ -159,7 +195,8 @@ def scenario_dict(d: Optional[Dict] = None) -> Dict:
     wake = night["time"].split("-")[1]
     now = wake
     if is_today():
-        real = current_time_h() + (24 if kst_now().hour < DAY_ROLLOVER_H else 0)
+        real = (kst_now() - datetime.combine(selected_day(), datetime.min.time(), kst_now().tzinfo)
+                ).total_seconds() / 3600       # 고른 날 0시부터 지금까지 (전날 밤이면 음수 → 기상 시각부터)
         now = h_to_hhmm(max(real, hhmm_to_h(wake)))
     sleep = list(d.get("prev_nights", [])) + [night if len(night) > 1 else night["time"]]
     return {

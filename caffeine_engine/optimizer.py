@@ -12,6 +12,8 @@
 
 찾는 방법: 아무것도 안 마시는 플랜에서 시작해, '한 잔 추가 · 시각 옮기기 ·
 양 바꾸기 · 빼기' 중 벌점을 가장 많이 줄이는 변경을 반복 (더 못 줄이면 끝).
+잔은 기본 속도(30분 동안 나눠 마시기)로 놓고 찾은 뒤, 잔마다 마시는 시간(15분~2시간)을 다듬는다
+(모든 조합을 다 보면 브라우저 속 계산이 너무 느려서 두 단계로 나눔).
 """
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -60,7 +62,7 @@ def _o(name: str):
 def gardiner_sleep_loss_min(dose: Dose, bed_h: float) -> float:
     """Gardiner 2023 메타회귀: 마지막 잔 기준 예상 수면 감소(분)."""
     model = params.load()["sleep_protection"]["sleep_loss_model"]
-    minutes_before = (bed_h - dose.time_h) * 60
+    minutes_before = (bed_h - dose.end_h) * 60     # 나눠 마시면 다 마신 시각 기준 (보수적)
     return model["intercept_min"] + model["per_min_before_bed"] * minutes_before + model["per_mg"] * dose.mg
 
 
@@ -111,11 +113,12 @@ class _Problem:
         self.slots = [round(x, 4) for x in np.arange(first, bed_h - 1e-9, step)]
         self.doses_mg = [mg for mg in _o("dose_options_mg") if mg <= single_cap_mg]
 
-        self._cache: Dict[Tuple[float, float], Tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+        self.pace = params.value("pacing", "default_h")
+        self._cache: Dict[Tuple[float, float, float], Tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
         self.base_effect = self._sum(self.already)[0]
 
     def _vectors(self, dose: Dose):
-        key = (dose.time_h, dose.mg)
+        key = (dose.time_h, dose.mg, dose.duration_h)
         if key not in self._cache:
             effect = np.array([dose_effect(dose, x) for x in self.t])
             sleep_amount = np.array([amount_from_dose(dose, x, self.half_life) for x in self.t_sleep])
@@ -175,20 +178,39 @@ class _Problem:
 
 
 def _neighbors(problem: _Problem, plan: List[Dose]):
+    pace = problem.pace
     if len(plan) < _o("max_new_doses"):
         for t in problem.slots:
+            if t + pace > problem.bed_h:
+                continue
             for mg in problem.doses_mg:
-                yield plan + [Dose(t, mg)]
+                yield plan + [Dose(t, mg, pace)]
     for i, d in enumerate(plan):
         rest = plan[:i] + plan[i + 1:]
         yield rest
         for mg in problem.doses_mg:
             if mg != d.mg:
-                yield rest + [Dose(d.time_h, mg)]
+                yield rest + [Dose(d.time_h, mg, d.duration_h)]
         for shift in (-4, -2, -1, 1, 2, 4):
             t = round(d.time_h + shift * _o("time_step_h"), 4)
-            if t in problem.slots:
-                yield rest + [Dose(t, d.mg)]
+            if t in problem.slots and t + d.duration_h <= problem.bed_h:
+                yield rest + [Dose(t, d.mg, d.duration_h)]
+
+
+def _refine_pace(problem: _Problem, plan: List[Dose], best: float) -> Tuple[List[Dose], float]:
+    """잔마다 마시는 시간을 바꿔 보고, 벌점이 min_gain보다 많이 줄면 그 속도로 (기준을 어기면 안 됨)."""
+    gain = params.value("pacing", "min_gain")
+    for i, d in enumerate(plan):
+        for dur in params.value("pacing", "durations_h"):
+            if dur == plan[i].duration_h or d.time_h + dur > problem.bed_h:
+                continue
+            trial = plan[:i] + [Dose(d.time_h, d.mg, dur)] + plan[i + 1:]
+            if problem.violations(trial):
+                continue
+            cost = problem.cost(trial)
+            if cost < best - gain * abs(best):
+                plan, best = trial, cost
+    return plan, best
 
 
 def cutoff_time(problem: _Problem) -> Optional[float]:
@@ -241,6 +263,7 @@ def optimize(sleeps: Sequence[SleepEpisode], windows: Sequence[Window], bed_h: f
             if cost >= best - 1e-9:
                 break
             best, plan = cost, sorted(choice, key=lambda d: d.time_h)
+        plan, best = _refine_pace(problem, plan, best)
 
     all_doses = sorted(problem.already + plan, key=lambda d: d.time_h)
     s_plan, s_none = problem.scores(plan), problem.scores([])
@@ -259,7 +282,7 @@ def optimize(sleeps: Sequence[SleepEpisode], windows: Sequence[Window], bed_h: f
         total_mg=sum(d.mg for d in all_doses),
         max_residual_mg=float(sleep_amount.max(initial=0)),
         sleep_loss_min=gardiner_sleep_loss_min(all_doses[-1], bed_h) if all_doses else 0.0,
-        last_dose_h=plan[-1].time_h if plan else None,
+        last_dose_h=plan[-1].end_h if plan else None,
         cutoff_h=cutoff_time(problem) if not already_problems else now_h,
         sleepiness_reduction=reduction,
         danger_hours=danger_plan,

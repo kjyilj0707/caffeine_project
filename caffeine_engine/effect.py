@@ -14,7 +14,7 @@ from typing import Iterable, List, Optional
 
 from . import params
 from .fatigue import AlertnessPoint
-from .pk import Dose
+from .pk import Dose, pieces
 
 
 def _p(name: str):
@@ -27,6 +27,8 @@ def _metric(metric: Optional[str]) -> str:
 
 def dose_effect(dose: Dose, t: float, metric: Optional[str] = None) -> float:
     """한 잔이 시각 t에 만드는 효과 크기 (g 분모에 더해지는 값, 0 이상)."""
+    if dose.duration_h > 0:     # 나눠 마시기: 조금씩 마신 잔들의 효과를 더함
+        return sum(dose_effect(p, t, metric) for p in pieces(dose))
     tau = t - dose.time_h
     if tau <= 0 or dose.mg <= 0:
         return 0.0

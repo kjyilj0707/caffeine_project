@@ -1,0 +1,4 @@
+# 로컬 실행용 설정 (웹 배포판은 index.html의 streamlitConfig와 같게)
+# [theme]은 넣지 않는다: 넣으면 사용자가 고른 다크/라이트가 무시됨. 강조색 초록은 app/theme.py의 CSS로.
+[client]
+toolbarMode = "minimal"

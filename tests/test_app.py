@@ -63,41 +63,80 @@ def _app():
 def test_plan_page_shows_doses_first_and_switches_preset():
     at = _app().run()
     assert not at.exception
-    assert "추천" in at.title[0].value
+    assert any("오늘 추천" in m.value for m in at.markdown)
     assert any("예시 값" in i.value for i in at.info)                    # 아직 내 정보가 아님을 알려줌
     labels = [e.label.split(" —")[0] for e in at.expander]
-    assert {"📈 그래프로 보기", "📊 자세한 수치", "🔔 핸드폰 알림 받기 (ntfy 앱 · 로그인 없이)"} <= set(labels)   # 펼쳐 보기
+    assert {"그래프로 보기", "자세한 수치", "핸드폰 알림 받기 (ntfy 앱 · 로그인 없이)"} <= set(labels)   # 펼쳐 보기
     assert not at.metric or all(m.proto.label for m in at.metric)
-    at.sidebar.selectbox[0].set_value("임신 후기 · 민감 (22시 30분 취침)")
-    at.sidebar.button[0].click().run()
-    assert not at.exception
+    at.switch_page("page_profile.py").run()                               # 예시 채우기는 프로필 탭 아래로 옮김
+    at.selectbox(key="example_preset").set_value("임신 후기 · 민감 (22시 30분 취침)")
+    at.button(key="example_fill").click().run()
+    assert not at.exception and at.session_state.data["profile"].get("pregnancy_trimester") == 3
+
+
+def test_bottom_tab_bar_has_five_tabs_in_order():
+    at = _app().run()
+    labels = [t.proto.label for t in at.get("page_link")]
+    assert labels[:5] == ["오늘 추천", "하루 입력", "리포트", "음료", "프로필"]   # 탭 바가 페이지보다 먼저 그려짐
+    assert len(at.sidebar.children) == 0                                     # 왼쪽 메뉴 없음
 
 
 def test_day_page_add_and_remove_intake_then_plan():
+    # 다이얼(휠)은 테스트 도구에서 그려지지 않아 기본값(마신 양 = 기본 사이즈 1잔, 시간대 14:00~16:00)이 들어간다
     at = _app().run()
     at.switch_page("page_day.py").run()
     assert not at.exception
-    assert at.title[0].value == "📅 하루 입력"
-    at.number_input(key="add_already_n_0").set_value(6)
+    assert any(m.value.endswith("하루 입력</div>") for m in at.markdown)
     next(b for b in at.button if b.key == "add_already_0").click().run()
     assert not at.exception
-    assert any("6모금" in m.value for m in at.markdown)
-    next(b for b in at.button if b.key == "add_집중_1").click().run()         # 집중 시간 추가 (14:00~16:00)
-    assert any(m.value == "14:00 ~ 16:00" for m in at.markdown)
+    assert any("기본 사이즈 1잔" in m.value for m in at.markdown)
+    assert at.session_state.data["today"]["already"][-1]["cups"] == 1.0
+    next(b for b in at.button if b.key == "add_win_1").click().run()         # 졸면 안 됨 14:00~16:00
+    assert any("14:00 ~ 16:00" in m.value for m in at.markdown)
     next(b for b in at.button if b.label == "저장하고 추천 보기 →").click().run()
     assert not at.exception
-    assert "추천" in at.title[0].value
-    assert any("이미 마신 것" in c.value and "6모금" in c.value for c in at.caption)
+    assert any("오늘 추천" in m.value for m in at.markdown)
+    assert any("이미 마신 것" in c.value and "기본 사이즈 1잔" in c.value for c in at.caption)
+
+
+def test_cup_amount_converts_to_mg():
+    from forms import AMOUNT_UNITS, amount_entry
+    from caffeine_engine.scenario import from_dict
+    entry = amount_entry("09:00", 1, 1.0)                                   # 기본 잔 1
+    assert entry == {"time": "09:00", "cups": 1.0, "size": "기본", "cup_ml": 520.0, "cup_name": "기본"}
+    from forms import amount_text, amount_units
+    sb = amount_units("스타벅스")
+    assert [u["name"] for u in sb] == ["Short 잔", "Tall 잔", "Venti 잔", "모금", "mg"]
+    tall = amount_entry("09:00", 1, 2.0, sb)
+    assert tall["cup_ml"] == 355 and amount_text(tall) == "Tall 2잔"
+    assert amount_entry("09:00", 3, 8) == {"time": "09:00", "sips": 8.0}   # 모금 8
+    assert amount_entry("09:00", 4, 250) == {"time": "09:00", "mg": 250.0} # 직접 입력 250mg
+    sc = from_dict({"profile": {"age": 30, "weight_kg": 60}, "sleep": ["00:00-07:00"], "today": {"now": "08:00", "bed": "23:00", "already": [entry]}})
+    assert abs(sc.already[0].mg - 520 * 0.428) < 0.5                        # 브랜드 모를 때 기본 520ml
+    from caffeine_engine.convert import cup_sizes
+    assert [(c.key, c.name, c.ml) for c in cup_sizes("스타벅스")] == [("스몰", "Short", 237), ("기본", "Tall", 355),
+                                                                     ("빅", "Venti", 591)]
+    assert [c.key for c in cup_sizes("메가MGC커피")] == ["기본", "빅"]           # 스몰 없는 브랜드
+    assert len(AMOUNT_UNITS) == 5
 
 
 def test_profile_page_updates_shared_data():
     at = _app().run()
     at.switch_page("page_profile.py").run()
     assert not at.exception
+    labels = [b.label for b in at.button if b.key and b.key.startswith("open_")]
+    assert [x.split(" · ")[0] for x in labels] == ["**기본**", "**건강**", "**카페인**", "**화면**"]   # 첫 화면 = 항목 목록
+    at.button(key="open_basic").click().run()
     at.radio(key="sex_0").set_value("여성").run()
+    assert at.session_state.data["sex"] == "남성"                         # 반영 전에는 그대로
+    at.button(key="settings_back").click().run()
+    at.button(key="open_health").click().run()
     at.checkbox(key="oc_0").check().run()
+    at.button(key="apply_settings").click().run()                          # [설정 반영하기]
+    assert not at.exception
     assert at.session_state.data["profile"]["oral_contraceptive"] is True
     assert at.session_state.data["sex"] == "여성"
+    assert at.button(key="apply_settings").disabled                       # 반영 후엔 바뀐 게 없음
 
 
 def test_pages_index_lists_every_runtime_file():
@@ -159,3 +198,72 @@ def test_menu_choices_skip_unknown_volume():
     assert '"beverages.yaml"' in (ROOT / "index.html").read_text(encoding="utf-8")  # 웹에서도 DB를 읽게
     nights = ["00:30-07:30", {"time": "01:30-08:00", "quality": 3, "latency_min": 20}]
     assert sleep_rows_to_list(sleep_list_to_rows(nights)) == nights
+
+
+def test_drink_groups():
+    from forms import drink_group
+    assert drink_group("스타벅스") == "카페" and drink_group("핫식스") == "에너지음료"
+    assert drink_group("스타벅스 RTD") == "편의점 커피" and drink_group("일반") == "차·탄산·믹스"
+
+
+def test_drinks_page_search_and_sort():
+    at = _app().run()
+    at.switch_page("page_drinks.py").run()
+    assert not at.exception
+    table = at.dataframe[0].value
+    assert len(table) > 100 and table["카페인(mg)"].is_monotonic_decreasing
+    at.text_input[0].set_value("콜드브루").run()
+    table = at.dataframe[0].value
+    assert not at.exception and len(table) > 0 and table["메뉴"].str.replace(" ", "").str.contains("콜드브루").all()
+    assert "콜드 브루" in set(table["메뉴"])                    # 띄어쓰기 달라도 찾음
+
+
+def test_timer_events_order_and_times():
+    from datetime import date, datetime
+    from types import SimpleNamespace
+    import timer_view
+    from caffeine_engine.pk import Dose
+    plan = SimpleNamespace(new_doses=[Dose(13.75, 100, 0.5)], cutoff_h=21.5)
+    serving = SimpleNamespace(sips=13, mg_actual=97, ml=228, cup="스몰 사이즈 1잔", minutes=30, pace="2~3분에 한 모금")
+    ev = timer_view.events(date(2026, 11, 4), plan, [serving], "커피", bed_h=23.0)
+    assert [e["kind"] for e in ev] == ["drink", "stop", "bed"]
+    assert ev[0]["title"] == "커피 스몰 사이즈 1잔" and ev[0]["sub"] == "약 228ml · 97mg"
+    assert ev[0]["pace"] == "30분 동안 나눠서 · 2~3분에 한 모금" and ev[0]["until"] - ev[0]["at"] == 30 * 60000
+    kst = datetime.fromtimestamp(ev[0]["at"] / 1000, tz=timer_view.local_tz())
+    assert (kst.hour, kst.minute) == (13, 45)
+
+
+def test_theme_mode_picker_writes_all_pages():
+    import theme
+    at = _app().run()
+    at.switch_page("page_profile.py").run()
+    at.button(key="open_display").click().run()
+    assert not at.exception and at.radio(key="theme_mode").value == "시스템 설정"
+    at.radio(key="theme_mode").set_value("다크").run()
+    assert not at.exception
+    assert len(theme.PAGES) == 6 and theme.MODES["다크"] == "Dark"
+
+
+def test_day_boundary_follows_bedtime():
+    from datetime import date, datetime
+    import state
+    from caffeine_engine.notify import local_tz
+    at = lambda h, m: datetime(2026, 11, 4, h, m, tzinfo=local_tz())
+    assert state.day_for(at(22, 59), "23:00") == date(2026, 11, 4)
+    assert state.day_for(at(23, 30), "23:00") == date(2026, 11, 5)   # 잘 시각이 지나면 다음 날 아침
+    assert state.day_for(at(0, 30), "01:00") == date(2026, 11, 3)    # 자정 넘어 자는 사람: 아직 어제
+    assert state.day_for(at(1, 30), "01:00") == date(2026, 11, 4)
+    assert state.day_for(at(8, 0), "01:00") == date(2026, 11, 4)
+
+
+def test_dial_typed_input_parsing():
+    from datetime import date
+    import dial
+    assert dial.parse_time("1:37") == "01:37" and dial.parse_time("0137") == "01:37"
+    assert dial.parse_time("7시 30분") == "07:30" and dial.parse_time("7시") == "07:00"
+    assert dial.parse_time("25:00") is None and dial.parse_time("abc") is None
+    assert dial.parse_span("01:30-08:00") == ("01:30", "08:00") and dial.parse_span("1400 ~ 1630") == ("14:00", "16:30")
+    today = date(2026, 11, 4)
+    assert dial.parse_date("11/3", today) == date(2026, 11, 3) and dial.parse_date("어제", today) == date(2026, 11, 3)
+    assert dial.parse_date("2026-10-30", today) == date(2026, 10, 30) and dial.parse_date("13/40", today) is None
+    assert dial.parse_number("250") == 250 and dial.parse_number("7분") == 7 and dial.parse_number("x") is None

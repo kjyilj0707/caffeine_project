@@ -148,14 +148,16 @@ def test_app_loads_saved_records_into_pages(monkeypatch):
     assert any("Grande" in c.value for c in at.caption)               # 저장된 메뉴 음료 기준
     at.switch_page("page_day.py").run()
     assert not at.exception
-    assert at.number_input(key="latency_1").value == 20
+    assert at.session_state.data["last_night"]["latency_min"] == 20    # 잠들기 휠 (기본값 = 저장된 값)
     assert at.radio(key="bev_1").value == "메뉴에서 고르기"
-    assert any(m.value == "13:00 ~ 15:00" for m in at.markdown)
+    assert any("13:00 ~ 15:00" in m.value for m in at.markdown)
     assert any("11/1" in c.value for c in at.caption)                 # 기록 있는 날
     at.switch_page("page_profile.py").run()
-    assert at.number_input(key="age_1").value == 30
-    next(b for b in at.button if "프로필 저장" in b.label).click().run()
-    assert not at.exception and calls["save"]
+    assert "30세" in at.button(key="open_basic").label                    # 불러온 프로필이 목록 요약에
+    at.button(key="open_caffeine").click().run()
+    at.radio(key="chrono_1").set_value("evening").run()
+    at.button(key="apply_settings").click().run()                          # 반영하면 서버에도 저장
+    assert not at.exception and calls["save"] and at.session_state.data["profile"]["chronotype"] == "evening"
 
 
 def test_app_save_and_feedback(monkeypatch):
@@ -163,7 +165,7 @@ def test_app_save_and_feedback(monkeypatch):
     at.switch_page("page_day.py").run()
     next(b for b in at.button if b.label == "저장하고 추천 보기 →").click().run()
     assert not at.exception and calls["save"][0][2] == "여성"
-    assert "추천" in at.title[0].value
+    assert any("오늘 추천" in m.value for m in at.markdown)
 
 
 def test_app_sleepiness_feedback(monkeypatch):
@@ -179,7 +181,9 @@ def test_app_day_without_sleep_asks_for_it(monkeypatch):
     saved.pop("last_night")
     at, _ = _app(monkeypatch, saved)
     assert not at.exception
-    assert any("잠 기록이 없어요" in w.value for w in at.warning)
+    assert any("잠 기록이 없어요" in i.value for i in at.info)            # 아침 첫 화면 = 하루 입력, 휠로 넣으라고 안내
+    at.switch_page("page_plan.py").run()                                 # 하루 입력의 휠 기본값으로 계산됨
+    assert not at.exception and any("오늘 추천" in m.value for m in at.markdown)
 
 
 def test_feedback_notification_in_middle_of_must_not_sleep():
@@ -193,13 +197,13 @@ def test_schedule_push_cancels_then_inserts():
     from caffeine_engine.notify import Notification, Scheduled
     fake = FakeServer()
     at = datetime(2026, 11, 2, 13, 45, tzinfo=KST)
-    items = [Scheduled(Notification(13.75, "drink", "☕ 13:45 커피 8모금", "약 60mg"), at, True)]
+    items = [Scheduled(Notification(13.75, "drink", "13:45 커피 8모금", "약 60mg"), at, True)]
     assert store.schedule_push(SESSION, items, date(2026, 11, 2), transport=fake) == 1
     (m1, p1, b1, _), (m2, p2, b2, _) = fake.calls
     assert m1 == "PATCH" and b1 == {"status": "cancelled"} and "status=eq.pending" in p1
     assert "send_at=gte.2026-11-02T04%3A00%3A00%2B09%3A00" in p1      # 그날 새벽 4시 ~ 다음 날 새벽 4시
     assert m2 == "POST" and b2 == [{"send_at": "2026-11-02T13:45:00+09:00", "kind": "drink",
-                                    "title": "☕ 13:45 커피 8모금", "body": "약 60mg"}]
+                                    "title": "13:45 커피 8모금", "body": "약 60mg"}]
 
 
 def test_app_push_section(monkeypatch):
@@ -217,3 +221,17 @@ def test_app_push_section(monkeypatch):
     next(b for b in at.button if b.label == "1분 뒤 테스트 알림").click().run()
     assert not at.exception and pushed and pushed[0].notification.kind == "test"
     assert not any("ntfy" in e.label for e in at.expander)             # 로그인하면 ntfy 대신 앱 알림
+
+
+def test_morning_first_open_goes_to_day_input(monkeypatch):
+    morning = {**SAVED, "last_night": None}                          # 오늘 아침 잠 기록이 아직 없음
+    at, _ = _app(monkeypatch, morning)
+    assert not at.exception
+    assert any(m.value.endswith("하루 입력</div>") for m in at.markdown)     # 첫 화면 = 하루 입력
+    at.switch_page("page_plan.py").run()                             # 한 번 띄운 뒤에는 다시 끌고 가지 않음
+    assert not any(m.value.endswith("하루 입력</div>") for m in at.markdown)
+
+
+def test_logged_in_with_sleep_record_opens_plan(monkeypatch):
+    at, _ = _app(monkeypatch, SAVED)
+    assert any("오늘 추천" in m.value for m in at.markdown)

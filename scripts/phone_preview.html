@@ -1,0 +1,81 @@
+<!doctype html>
+<!-- 개발용: 로컬 앱(localhost:8501)을 휴대폰 크기 틀 안에 띄워 보며 UI를 고친다.
+     열기: open scripts/phone_preview.html  (앱은 .venv/bin/streamlit run app/streamlit_app.py --server.runOnSave true) -->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>휴대폰 미리보기</title>
+<style>
+  :root { --bg: #ecebe7; --ink: #2b2b2b; --muted: #77756f; --frame: #1d1d1f; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink);
+         font-family: -apple-system, "Apple SD Gothic Neo", sans-serif;
+         display: flex; gap: 32px; justify-content: center; align-items: flex-start; padding: 24px; }
+  .panel { width: 220px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 24px; }
+  .panel h1 { font-size: 16px; margin: 0 0 4px; }
+  .panel p { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.5; }
+  .panel label { font-size: 12px; color: var(--muted); }
+  select, button { font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 8px;
+                   border: 1px solid #cfcdc6; background: #fff; cursor: pointer; text-align: left; }
+  button:hover { background: #f6f5f1; }
+  .pages { display: flex; flex-direction: column; gap: 6px; }
+  .phone { background: var(--frame); border-radius: 52px; padding: 14px; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+  .screen { position: relative; border-radius: 40px; overflow: hidden; background: var(--frame); }
+  .notch { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 110px; height: 30px;
+           background: var(--frame); border-radius: 20px; z-index: 2; pointer-events: none; }
+  iframe { display: block; border: 0; background: #fff; }
+  .stage { position: relative; }          /* 축소된 휴대폰이 차지할 실제 자리 (JS가 크기 지정) */
+  .stage .phone { position: absolute; top: 0; left: 0; transform-origin: top left; }
+  .size { position: fixed; bottom: 8px; right: 12px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="panel">
+    <h1>📱 휴대폰 미리보기</h1>
+    <p>코드를 저장하면 자동으로 다시 그려져요. 안 바뀌면 ‘새로고침’.</p>
+    <label>기기 크기</label>
+    <select id="device">
+      <option value="390x844" selected>iPhone 15 · 390×844</option>
+      <option value="393x852">iPhone 15 Pro · 393×852</option>
+      <option value="430x932">iPhone 15 Pro Max · 430×932</option>
+      <option value="375x667">iPhone SE · 375×667</option>
+      <option value="360x800">Galaxy S · 360×800</option>
+    </select>
+    <label>페이지</label>
+    <div class="pages">
+      <button data-page="">☕ 오늘의 추천</button>
+      <button data-page="page_day">📅 하루 입력</button>
+      <button data-page="page_report">📊 리포트</button>
+      <button data-page="page_drinks">🥤 음료 카페인</button>
+      <button data-page="page_profile">👤 내 프로필</button>
+    </div>
+    <button id="reload">🔄 새로고침</button>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="phone"><div class="screen"><div class="notch"></div>
+      <iframe id="app" src="http://localhost:8501/"></iframe>
+    </div></div>
+  </div>
+  <div class="size" id="sizeLabel"></div>
+
+<script>
+  const app = document.getElementById("app");
+  const device = document.getElementById("device");
+  const base = "http://localhost:8501/";
+  function resize() {
+    const [w, h] = device.value.split("x").map(Number);
+    // 창이 작으면 휴대폰 틀 전체를 transform으로 줄임 (앱 안의 폭은 그대로 w → 실제 휴대폰과 같은 배치)
+    const pad = 14 * 2, scale = Math.min(1, (window.innerHeight - 48) / (h + pad), (window.innerWidth - 300) / (w + pad));
+    app.style.width = w + "px"; app.style.height = h + "px";
+    const phone = document.querySelector(".phone"), stage = document.getElementById("stage");
+    phone.style.transform = `scale(${scale})`;
+    stage.style.width = (w + pad) * scale + "px"; stage.style.height = (h + pad) * scale + "px";
+    document.getElementById("sizeLabel").textContent = `${w}×${h}` + (scale < 1 ? ` · ${Math.round(scale * 100)}% 축소 표시` : "");
+  }
+  device.onchange = resize; window.onresize = resize; resize();
+  document.querySelectorAll("[data-page]").forEach(b => b.onclick = () => { app.src = base + b.dataset.page; });
+  document.getElementById("reload").onclick = () => { app.src = app.src; };
+</script>
+</body>
+</html>

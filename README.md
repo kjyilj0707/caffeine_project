@@ -36,6 +36,7 @@ flowchart LR
 | ④ 최적화 | 졸림은 최대한 줄이고, 위험선 7 지키기 · 잠든 뒤 잔량 ≤ 30mg · 수면 감소 < 20분 · 상한 · 2시간 간격 | Vital-Lopez 2018, Gardiner 2023 | ✅ `optimizer.py` |
 | ⑤ 변환 | 커피 0.43mg/ml 등 → 모금 수 (반대로 'n모금 마심' → mg) | Gardiner 2023 인용값 | ✅ `convert.py` |
 | 지표 | 상한 대비 %, 위험선 위 시간 비율, 수면 부채, 일·주·월 리포트 | 식약처, NSF(7~9h) | ✅ `metrics.py` |
+| 예측 vs 실제 | 각성 점수 → 예측 졸림(KSS)으로 바꿔 내가 남긴 졸림과 비교 · 잠들 때 몸속 카페인별 잠들기 시간 | Ingre 2014 (KSS = 10.6 − 0.6 × 각성 점수) | ✅ `calibration.py` (보여주기만) |
 
 **핵심 숫자**
 - 하루 상한 성인 400mg · 임산부 300mg · 청소년 2.5mg/kg (식약처), 1회 200mg (EFSA)
@@ -82,9 +83,10 @@ print(format_card(result))
 | --- | --- |
 | `parameters.yaml` | 엔진의 모든 숫자 + 출처 + 확정/임시 상태 |
 | `beverages.yaml` | **음료 카페인 DB 129종** — 카페 9개 브랜드·편의점 커피·에너지음료·차 (출처·용량·mg, 조사일 2026-11-01) |
-| `caffeine_engine/` | 계산 엔진 — `profile.py` ① · `fatigue.py` ② · `pk.py` ③ · `effect.py` 카페인 효과 · `optimizer.py` ④ · `convert.py` ⑤ · `metrics.py` 지표 · `pipeline.py` 전체 실행 + 결과 카드 · `scenario.py` 시나리오 파일 읽기 · `notify.py` 플랜 → 예약 알림 |
-| `tests/` | 논문 결과 재현 + 규칙 준수 + 화면 + 알림 + 음료 DB 검사 (98개) |
-| `app/` | **입력 화면** (Streamlit) — `streamlit_app.py` 화면 · `forms.py` 입력 변환 · `charts.py` 인터랙티브 그래프 · `ntfy.py` 알림 전송 |
+| `caffeine_engine/` | 계산 엔진 — `profile.py` ① · `fatigue.py` ② · `pk.py` ③ · `effect.py` 카페인 효과 · `optimizer.py` ④ · `convert.py` ⑤ · `metrics.py` 지표 · `pipeline.py` 전체 실행 + 결과 카드 · `scenario.py` 시나리오 파일 읽기 · `notify.py` 플랜 → 예약 알림 · `calibration.py` 예측 vs 실제 비교 |
+| `tests/` | 논문 결과 재현 + 규칙 준수 + 화면 + 알림 + 음료 DB + 기록·리포트·개인화 검사 (133개) |
+| `app/` | **화면** (Streamlit) — `streamlit_app.py` 시작(페이지 4개) · `page_plan.py` ☕ 추천 · `page_day.py` 📅 하루 입력 · `page_report.py` 📊 리포트 · `page_profile.py` 👤 프로필 · `state.py` 공유 입력 · `store.py` 서버 저장 · `report.py` 리포트 계산 · `account.py` 로그인 · `charts.py` 그래프 · `ntfy.py` 알림 |
+| `supabase/` | 서버 표·권한(RLS) 정의 `migrations/` · 웹 푸시 발송 함수 `functions/send-push` |
 | `index.html` | GitHub Pages용 — stlite로 브라우저 안에서 Python을 돌려 `app/`을 서버 없이 실행 |
 | `scenarios/` | **데모 입력 파일** — 고쳐서 다시 실행하면 결과가 바뀜 |
 | `scripts/` | `demo.py` 데모 · 확인용 그래프 스크립트 (`daychart.py` 공통 그리기) |
@@ -138,8 +140,14 @@ beverage: coffee        # coffee / black_tea / {name: "아메리카노 톨", mg:
 - [x] Step 1-6 — 데모 (시나리오 파일 → 결과 카드 + 그래프)
 - [x] Step 2 — 입력 화면 MVP (Streamlit, GitHub Pages 배포)
 - [x] Step 3 — 알림 (☕ 마셔 / ⛔ 금지 / 상한 경고) — ntfy 예약 푸시, 핸드폰 수신 확인
-- [x] 음료 카페인 DB 조사 (129종, `beverages.yaml`) — 앱 메뉴 선택 연결은 예정
-- [ ] Step 4~ — 기록·리포트, 피드백 개인화
+- [x] 음료 카페인 DB 조사 (129종, `beverages.yaml`) — 브랜드→메뉴→사이즈 고르기로 앱에 연결 (4-④)
+- [x] Step 4 — 로그인·기록 저장 (Supabase) · 화면 개편(페이지 4개) · 달력 · 앱 웹 푸시 알림 · 매일 피드백(졸림 KSS·잠들기) · 📊 리포트(하루·일주일·한 달)
+- [x] Step 5-① — 예측 vs 실제: 리포트에 '모델 예측 졸림 vs 내 졸림', '잠들 때 카페인 vs 잠들기 시간' 표시 (추천은 아직 그대로)
+- [x] UI 개편 (2026-11-04) — 휴대폰 화면 기준: 아래 탭 바 · 타이머형 추천(초록→노랑 10분 전→빨강 1분 전) · 카드형 리포트 · iOS 휠 입력(+직접 입력) · 다크/라이트 · 프로필/설정 목록형 + 설정 반영하기 · 아침 첫 화면 = 하루 입력(잘 시각 기준으로 날짜 넘김) · 피드백 화면
+- [x] 나눠 마시기 추천 — '몇 모금' 대신 '잔 크기 · 마시는 시간 · 몇 분에 한 모금' (엔진: 한 잔을 마시는 시간 동안 10분마다 나눠 마신 것으로 계산, `parameters.yaml` pacing)
+- [x] 브랜드별 컵 크기 9개 브랜드 + '그 외' (`beverages.yaml` cup_sizes, 조사일 2026-11-04)
+- [x] 간편 로그인 — 이메일 + 비밀번호 (가입 때만 메일 확인, 비밀번호 없거나 잊으면 메일 코드로 들어와 비밀번호 설정)
+- [ ] Step 5-② — 개인 보정: 쌓인 차이로 이 사람의 위험선·취침 허용 잔량 등을 조정해 추천에 반영
 
 ### Step 3 알림 — 방식 테스트 (2026-11-01, 핸드폰)
 

@@ -1,4 +1,4 @@
-"""📅 하루 입력의 달력 보기 (일주일 / 한 달). 날짜를 누르면 그날 입력으로 돌아간다."""
+"""하루 입력의 달력 보기 (일주일 / 한 달). 날짜를 누르면 그날 입력으로 돌아간다."""
 import calendar
 from datetime import date, timedelta
 from typing import Dict, List, Optional
@@ -28,15 +28,14 @@ def cell_text(day: date, info: Dict, detailed: bool, is_today: bool = False) -> 
     head = f"{day.month}/{day.day}" if detailed else str(day.day)
     lines = [f"**{head} 오늘**" if is_today else head]
     if detailed:
-        lines.append(f"😴 {info['sleep']}" if "sleep" in info else "😴 —")
-        lines.append(f"☕ {info['mg']:.0f}mg" if "mg" in info else "☕ —")
+        lines.append(f"잠 {info['sleep']}" if "sleep" in info else "잠 —")
+        lines.append(f"카페인 {info['mg']:.0f}mg" if "mg" in info else "카페인 —")
         if "plan" in info:
-            lines.append(f"📋 추천 {info['plan']}잔")
+            lines.append(f"추천 {info['plan']}잔")
         if "kss" in info:
-            lines.append(f"📝 졸림 {info['kss']:g}")
+            lines.append(f"졸림 {info['kss']:g}")
     else:
-        marks = ("😴" if "sleep" in info else "") + ("☕" if "mg" in info else "") + ("📋" if "plan" in info else "")
-        lines.append(marks or "·")
+        lines.append("●" if info.keys() & {"sleep", "mg", "plan"} else "·")   # 한 달 보기는 칸이 좁아 기록 있음만
     return "  \n".join(lines)
 
 
@@ -85,7 +84,7 @@ def render(view: str) -> None:
     if state.session() is None:
         st.info("로그인하면 날짜마다 저장한 기록이 달력에 표시돼요. 지금은 날짜를 골라 입력하는 것만 돼요.")
     else:
-        st.caption("😴 잠 기록 · ☕ 마신 양 · 📋 저장한 추천 · 📝 졸림 평균 — 날짜를 누르면 그날 입력으로 가요.")
+        st.caption("● 기록 있는 날 — 날짜를 누르면 그날 입력으로 가요.")
 
     head = st.columns(7)
     for col, name in zip(head, WEEK_HEAD):

@@ -46,7 +46,7 @@ def build_frames(sc, result) -> Dict[str, pd.DataFrame]:
         dose_rows.append({
             "t": d.time_h, "시각": h_to_hhmm(d.time_h), "mg": round(d.mg),
             "구분": "추천" if d in planned else "이미 마심",
-            "설명": f"{s.beverage.name} {s.sips}모금 (약 {s.mg_actual:.0f}mg)" if s else f"{d.mg:.0f}mg",
+            "설명": f"{s.beverage.name} {s.cup} · {s.minutes}분 동안 (약 {s.mg_actual:.0f}mg)" if s else f"{d.mg:.0f}mg",
         })
     windows = pd.DataFrame([{"start": w.start_h, "end": w.end_h, "구간": KIND_NAME[w.kind],
                              "시간": f"{h_to_hhmm(w.start_h)}–{h_to_hhmm(w.end_h)}"}

@@ -1,0 +1,188 @@
+<!doctype html>
+<!-- 다이얼 입력 부품 (Streamlit 사용자 부품 v1, 빌드 없이 파일 하나).
+  kind = "wheel"  : iOS처럼 굴리는 휠 여러 줄. args.columns = [{options:[글자...]} | {sep:":"}], args.index = [고른 칸...]
+                    → 돌려주는 값: [각 휠의 고른 칸 번호]
+  kind = "amount" : 오른쪽 단위 휠을 바꾸면 왼쪽 숫자 휠이 그 단위의 목록으로 바뀜.
+                    args.units = [{name, options:[글자...]}], args.value = {unit, idx} → 돌려주는 값: {unit, idx}
+  kind = "line"   : 손으로 끌어 길이를 정하는 선. args.value = 0~1, args.labels = [왼쪽 끝 … 오른쪽 끝 설명]
+                    → 돌려주는 값: 0~1 (소수 둘째 자리)
+  Streamlit과는 postMessage로 주고받는다 (streamlit-component-lib 없이 같은 약속을 직접 구현). -->
+<html><head><meta charset="utf-8">
+<style>
+  :root { --fg: #111; --muted: #8a8a8f; --band: rgba(120,120,128,.14); --acc: #34C759; --bg: #fff; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: transparent; color: var(--fg); overflow: hidden;
+               font-family: "Source Sans Pro", -apple-system, "Apple SD Gothic Neo", sans-serif; user-select: none; }
+  .label { font-size: 14px; margin: 0 2px 6px; display: flex; justify-content: space-between; align-items: baseline; }
+  .label .v { color: var(--acc); font-weight: 600; font-size: 15px; }
+  .wheels { position: relative; display: flex; justify-content: center; gap: 2px; height: 180px; }
+  .band { position: absolute; left: 0; right: 0; top: 72px; height: 36px; border-radius: 10px; background: var(--band);
+          pointer-events: none; }
+  .col { position: relative; height: 180px; overflow-y: scroll; scroll-snap-type: y mandatory; scrollbar-width: none;
+         flex: 1 1 0; max-width: 140px; text-align: center; overscroll-behavior: contain;
+         -webkit-mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent);
+                 mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent); }
+  .col::-webkit-scrollbar { display: none; }
+  .col .pad { height: 72px; }
+  .col .it { height: 36px; line-height: 36px; font-size: 21px; scroll-snap-align: center; white-space: nowrap;
+             font-variant-numeric: tabular-nums; cursor: pointer; transition: opacity .15s; opacity: .35; }
+  .col .it.on { opacity: 1; font-weight: 500; }
+  .sep { flex: none; width: 18px; line-height: 180px; text-align: center; font-size: 21px; }
+  /* 선 */
+  .line { position: relative; height: 44px; touch-action: none; cursor: pointer; }
+  .track { position: absolute; left: 0; right: 0; top: 18px; height: 8px; border-radius: 4px; background: var(--band); }
+  .fill { position: absolute; left: 0; top: 18px; height: 8px; border-radius: 4px; background: var(--acc); }
+  .knob { position: absolute; top: 8px; width: 28px; height: 28px; margin-left: -14px; border-radius: 50%;
+          background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.3), 0 0 0 .5px rgba(0,0,0,.08); }
+  .label .right { display: flex; gap: 10px; align-items: baseline; }
+  .type { border: 0; background: none; color: var(--acc); font: inherit; font-size: 13px; padding: 0; cursor: pointer; }
+  .typerow { display: none; gap: 8px; margin: 4px 0 8px; }
+  .typerow.on { display: flex; }
+  .typerow input { flex: 1; min-width: 0; font: inherit; font-size: 17px; padding: 10px 12px; border-radius: 10px;
+                   border: 1px solid var(--band); background: var(--band); color: var(--fg); outline: none; }
+  .typerow input:focus { border-color: var(--acc); }
+  .typerow button { border: 0; border-radius: 10px; padding: 0 16px; background: var(--acc); color: #fff; font: inherit;
+                    font-size: 15px; cursor: pointer; }
+  .hide { display: none !important; }
+  .ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 2px; }
+</style></head>
+<body><div id="app"></div>
+<script>
+const ITEM = 36;
+let args = null, sent = null, built = null;
+
+function post(type, data) { window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, "*"); }
+function setValue(v) { const s = JSON.stringify(v); if (s === sent) return; sent = s;
+  post("streamlit:setComponentValue", { value: v, dataType: "json" }); }
+function setHeight() { post("streamlit:setFrameHeight", { height: document.getElementById("app").scrollHeight + 4 }); }
+
+function applyTheme(t) {
+  if (!t) return;
+  const r = document.documentElement.style, dark = t.base === "dark";
+  r.setProperty("--fg", t.textColor || (dark ? "#fafafa" : "#111"));
+  r.setProperty("--muted", dark ? "#8e8e93" : "#8a8a8f");
+  r.setProperty("--band", dark ? "rgba(120,120,128,.24)" : "rgba(120,120,128,.14)");
+}
+
+// ── 휠 하나: options 목록, 시작 칸, 바뀌면 onPick(칸) ──
+function makeColumn(options, start, onPick) {
+  const col = document.createElement("div"); col.className = "col";
+  col.innerHTML = '<div class="pad"></div>' + options.map((o, i) => `<div class="it" data-i="${i}">${o}</div>`).join("")
+                + '<div class="pad"></div>';
+  let cur = -1, timer = null, quietUntil = 0;   // 코드로 돌린 직후의 스크롤은 사용자 입력으로 치지 않음
+  const mark = i => { col.querySelectorAll(".it").forEach((el, k) => el.classList.toggle("on", k === i)); };
+  col.setIndex = (i, smooth) => { i = Math.max(0, Math.min(options.length - 1, i)); cur = i; mark(i);
+    if (!smooth) quietUntil = Date.now() + 500;
+    col.scrollTo({ top: i * ITEM, behavior: smooth ? "smooth" : "auto" }); };
+  col.getIndex = () => cur;
+  col.addEventListener("scroll", () => {
+    const i = Math.max(0, Math.min(options.length - 1, Math.round(col.scrollTop / ITEM)));
+    if (i !== cur) { cur = i; mark(i); }
+    clearTimeout(timer);
+    timer = setTimeout(() => { if (Date.now() > quietUntil) onPick(cur); }, 140);
+  });
+  col.addEventListener("click", e => { const it = e.target.closest(".it"); if (it) col.setIndex(+it.dataset.i, true); });
+  requestAnimationFrame(() => col.setIndex(start, false));
+  return col;
+}
+
+function header(label, valueText) {
+  if (!label) return "";
+  const t = args && args.typing ? `<button class="type" id="tbtn">직접 입력</button>` : "";
+  const row = args && args.typing ? `<div class="typerow" id="trow"><input id="tin" placeholder="${args.typing}"
+      enterkeyhint="done"><button id="tok">확인</button></div>` : "";
+  return `<div class="label"><span>${label}</span><span class="right"><span class="v" id="vt">${valueText || ""}</span>${t}</span></div>${row}`;
+}
+
+// 직접 입력: [직접 입력] → 입력칸이 열리고 휠·선은 숨김. 확인/엔터 → {text, unit?}을 Python으로 (해석은 Python이)
+function wireTyping(body, extra) {
+  const btn = document.getElementById("tbtn"); if (!btn) return;
+  const row = document.getElementById("trow"), inp = document.getElementById("tin");
+  const close = () => { row.classList.remove("on"); body.classList.remove("hide"); btn.textContent = "직접 입력"; setHeight(); };
+  btn.onclick = () => { if (row.classList.contains("on")) return close();
+    row.classList.add("on"); body.classList.add("hide"); btn.textContent = "휠로"; setHeight(); inp.focus(); };
+  const ok = () => { const text = inp.value.trim(); if (!text) return close();
+    sent = null; setValue({ text, ...(extra ? extra() : {}) });
+    const vt = document.getElementById("vt"); if (vt) vt.textContent = text; inp.value = ""; close(); };
+  document.getElementById("tok").onclick = ok;
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") ok(); });
+}
+
+function buildWheel(a) {
+  const app = document.getElementById("app");
+  app.innerHTML = header(a.label) + '<div class="wheels"><div class="band"></div></div>';
+  const box = app.querySelector(".wheels"), cols = [];
+  const report = () => { const vt = document.getElementById("vt"); if (vt) vt.textContent = "";
+    setValue(cols.filter(Boolean).map(c => c.getIndex())); };
+  wireTyping(box);
+  a.columns.forEach((c, k) => {
+    if (c.sep !== undefined) { const s = document.createElement("div"); s.className = "sep"; s.textContent = c.sep;
+      box.appendChild(s); cols.push(null); return; }
+    const col = makeColumn(c.options, a.index[cols.filter(Boolean).length] || 0, report);
+    if (c.width) col.style.maxWidth = c.width + "px";
+    box.appendChild(col); cols.push(col);
+  });
+  built = { kind: "wheel", update: b => { const live = cols.filter(Boolean);
+    b.index.forEach((i, k) => { if (live[k] && live[k].getIndex() !== i) live[k].setIndex(i, false); }); } };
+}
+
+function buildAmount(a) {
+  const app = document.getElementById("app");
+  app.innerHTML = header(a.label) + '<div class="wheels"><div class="band"></div></div>';
+  const box = app.querySelector(".wheels");
+  let unit = a.value.unit, num = null;
+  const report = () => { const vt = document.getElementById("vt"); if (vt) vt.textContent = "";
+    setValue({ unit, idx: num.getIndex() }); };
+  wireTyping(box, () => ({ unit }));
+  const makeNum = (start) => { const c = makeColumn(a.units[unit].options, start, report); c.style.maxWidth = "120px"; return c; };
+  num = makeNum(a.value.idx);
+  const unitCol = makeColumn(a.units.map(u => u.name), unit, i => {
+    if (i === unit) return report();
+    unit = i; const fresh = makeNum(a.units[i].start || 0); box.replaceChild(fresh, num); num = fresh;
+    setTimeout(report, 60);
+  });
+  unitCol.style.maxWidth = "130px";
+  box.appendChild(num); box.appendChild(unitCol);
+  built = { kind: "amount", update: () => {} };
+}
+
+function buildLine(a) {
+  const app = document.getElementById("app"), labels = a.labels || [];
+  const text = v => labels.length ? labels[Math.min(labels.length - 1, Math.floor(v * labels.length * 0.9999))] : "";
+  app.innerHTML = header(a.label, text(a.value)) +
+    '<div class="line"><div class="track"></div><div class="fill"></div><div class="knob"></div></div>' +
+    (a.ends ? `<div class="ends"><span>${a.ends[0]}</span><span>${a.ends[1]}</span></div>` : "");
+  const line = app.querySelector(".line"), fill = app.querySelector(".fill"), knob = app.querySelector(".knob");
+  const lineBox = document.createElement("div"); line.parentNode.insertBefore(lineBox, line);
+  lineBox.appendChild(line); const endsEl = app.querySelector(".ends"); if (endsEl) lineBox.appendChild(endsEl);
+  wireTyping(lineBox);
+  let v = a.value;
+  const draw = () => { fill.style.width = (v * 100) + "%"; knob.style.left = (v * 100) + "%";
+    const vt = document.getElementById("vt"); if (vt) vt.textContent = text(v); };
+  const at = e => { const r = line.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); };
+  let dragging = false;
+  line.addEventListener("pointerdown", e => { dragging = true; line.setPointerCapture(e.pointerId); v = at(e); draw(); });
+  line.addEventListener("pointermove", e => { if (dragging) { v = at(e); draw(); } });
+  line.addEventListener("pointerup", () => { dragging = false; setValue(Math.round(v * 100) / 100); });
+  draw();
+  built = { kind: "line", update: b => { if (!dragging && Math.abs(b.value - v) > 0.001) { v = b.value; draw(); } } };
+}
+
+window.addEventListener("message", e => {
+  if (!e.data || e.data.type !== "streamlit:render") return;
+  const a = e.data.args;
+  args = a;
+  applyTheme(e.data.theme);
+  const sig = JSON.stringify([a.kind, a.label, a.columns, a.units, a.labels]);
+  if (!built || built.sig !== sig) {
+    sent = JSON.stringify(a.kind === "wheel" ? a.index : a.value);
+    ({ wheel: buildWheel, amount: buildAmount, line: buildLine })[a.kind](a);
+    built.sig = sig;
+    setTimeout(setHeight, 0);
+  } else {
+    built.update(a);
+  }
+  args = a;
+});
+post("streamlit:componentReady", { apiVersion: 1 });
+</script></body></html>

@@ -28,10 +28,10 @@ def test_week_and_month_grids():
 def test_cell_text():
     info = {"sleep": "01:30~08:00", "mg": 210.4, "plan": 2, "kss": 5.5}
     week = cell_text(date(2026, 11, 2), info, detailed=True, is_today=True)
-    assert week.startswith("**11/2 오늘**") and "😴 01:30~08:00" in week and "☕ 210mg" in week
-    assert "📋 추천 2잔" in week and "📝 졸림 5.5" in week
+    assert week.startswith("**11/2 오늘**") and "잠 01:30~08:00" in week and "카페인 210mg" in week
+    assert "추천 2잔" in week and "졸림 5.5" in week
     assert cell_text(date(2026, 11, 3), {}, detailed=True).count("—") == 2
-    assert cell_text(date(2026, 11, 2), info, detailed=False) == "2  \n😴☕📋"
+    assert cell_text(date(2026, 11, 2), info, detailed=False) == "2  \n●"
     assert cell_text(date(2026, 11, 3), {}, detailed=False) == "3  \n·"
 
 
@@ -63,11 +63,11 @@ def test_calendar_buttons_open_and_pick_day(monkeypatch):
     monkeypatch.setattr(store, "range_summary", lambda s, a, b: {a.isoformat(): {"sleep": "00:00~07:00"}})
     at = AppTest.from_file(str(ROOT / "app" / "streamlit_app.py"), default_timeout=60).run()
     at.switch_page("page_day.py").run()
-    next(b for b in at.button if b.label == "📆 일주일 보기").click().run()
+    next(b for b in at.button if b.label == "일주일 보기").click().run()
     assert not at.exception
     cells = [b for b in at.button if (b.key or "").startswith("cal_")]
-    assert len(cells) == 7 and any("😴 00:00~07:00" in b.label for b in cells)
-    next(b for b in at.button if b.label == "🗓 한 달 보기").click().run()
+    assert len(cells) == 7 and any("잠 00:00~07:00" in b.label for b in cells)
+    next(b for b in at.button if b.label == "한 달 보기").click().run()
     cells = [b for b in at.button if (b.key or "").startswith("cal_")]
     assert 28 <= len(cells) <= 31
     target = cells[0]

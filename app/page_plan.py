@@ -1,4 +1,4 @@
-"""☕ 오늘의 추천 — 몇 시에 몇 모금, 언제부터 금지. 로그인하면 앱 알림 예약·졸림 기록.
+"""오늘의 추천 — 몇 시에 몇 모금, 언제부터 금지. 로그인하면 앱 알림 예약·졸림 기록.
 그래프·자세한 수치는 아래에서 펼쳐 본다."""
 import pandas as pd
 import streamlit as st
@@ -6,8 +6,9 @@ import yaml
 
 import state
 import store
+import timer_view
 from charts import build_charts, build_frames
-from forms import KSS_LABEL
+from forms import KSS_LABEL, amount_text
 from ntfy import publish, valid_topic
 
 from caffeine_engine.notify import (current_time_h, feedback_notifications, plan_notifications, schedule,
@@ -19,22 +20,21 @@ d = state.data()
 day = state.selected_day()
 s = state.session()
 
-st.title(f"☕ {state.day_label(day)} 추천")
+# 큰 제목 대신 작은 날짜 줄 — 타이머 링이 화면 가운데를 채우게
+st.markdown(f"<div style='text-align:center;font-size:15px;color:#8a8a8f;margin:-4px 0 4px'>"
+            f"{state.day_label(day)} · 오늘 추천</div>", unsafe_allow_html=True)
 if st.session_state.pop("just_saved", False):
-    st.toast("저장했어요", icon="☁️")
-if d["example"]:
-    st.info("지금은 **예시 값**으로 보여주고 있어요. **👤 내 프로필 → 📅 하루 입력** 순서로 내 정보를 넣으면 "
-            "나에게 맞는 추천이 나와요.")
+    st.toast("저장했어요")
 if d.get("last_night") is None:
     st.warning(f"{state.day_label(day)}의 어젯밤 잠 기록이 없어요. 잠든·깬 시각을 넣어야 계산할 수 있어요.")
-    st.page_link("page_day.py", label="📅 하루 입력으로 가기", icon="➡️")
+    st.page_link("page_day.py", label="하루 입력으로 가기 →")
     st.stop()
 
 try:
     sd, sc, result = state.compute()
 except ValueError as e:
     st.error(f"입력을 확인해 주세요: {e}")
-    st.page_link("page_day.py", label="📅 하루 입력에서 고치기", icon="➡️")
+    st.page_link("page_day.py", label="하루 입력에서 고치기 →")
     st.stop()
 plan = result.plan
 if plan is None:
@@ -42,38 +42,23 @@ if plan is None:
         st.error(note)
     st.stop()
 
-# ── 메인: 몇 시에 몇 모금 ──
-next_i = 0 if state.is_today() else None    # 오늘이면 첫 잔이 '다음에 마실 잔' (추천은 지금 이후만 나옴)
+# ── 메인: 타이머 (다음 일정까지 남은 시간, 가운데 큰 링) ──
 bev_name = sc.beverage.name
-if result.servings:
-    st.caption(f"{bev_name} 기준 · 모금 = 한 모금 {sd['sip_ml']:g}ml")
-    for i, (dose, serving) in enumerate(zip(plan.new_doses, result.servings)):
-        with st.container(border=True):
-            c1, c2 = st.columns([1, 1.25], vertical_alignment="center")
-            badge = " :orange-badge[다음]" if i == next_i else ""
-            c1.markdown(f"<div style='font-size:2.6rem;font-weight:700;line-height:1.1'>{h_to_hhmm(dose.time_h)}</div>",
-                        unsafe_allow_html=True)
-            c2.markdown(f"<div style='font-size:2rem;font-weight:700;line-height:1.1'>☕ {serving.sips}모금</div>",
-                        unsafe_allow_html=True)
-            c2.caption(f"약 {serving.ml:.0f}ml · {serving.mg_actual:.0f}mg{badge}")
+dark = getattr(getattr(st.context, "theme", None), "type", None) == "dark"
+timer_view.render(day, sc.sleeps[-1].end_h, timer_view.events(day, plan, result.servings, bev_name, sc.bed_h),
+                  live=state.is_today(), dark=dark)
+if not result.servings:
+    st.caption("오늘은 더 마시지 않는 게 좋아요 — 이미 마신 양이나 잘 시각을 보면 잠을 방해할 가능성이 커요.")
 else:
-    with st.container(border=True):
-        st.markdown("<div style='font-size:1.6rem;font-weight:700'>오늘은 더 마시지 않는 게 좋아요</div>",
-                    unsafe_allow_html=True)
-        st.caption("이미 마신 양이나 잘 시각을 보면, 더 마시면 잠을 방해할 가능성이 커요.")
-
-stops = []
-if plan.last_dose_h is not None and result.servings:
-    stops.append(f"🔕 **{h_to_hhmm(plan.last_dose_h)}** 이후엔 추천 외 카페인 금지")
-if plan.cutoff_h is not None:
-    stops.append(f"⛔ **{h_to_hhmm(plan.cutoff_h)}부터는 한 모금도 금지** (잠 보호)")
-if stops:
-    st.markdown("  \n".join(stops))
+    st.caption(f"{bev_name} 기준 · 한 번에 들이켜지 말고 정해진 시간 동안 나눠 마시기"
+               + (f" · {h_to_hhmm(plan.last_dose_h)} 이후엔 추천 외 카페인 금지" if plan.last_dose_h is not None else ""))
+if d["example"]:
+    st.info("지금은 **예시 값**으로 보여주고 있어요. **프로필 → 하루 입력** 순서로 내 정보를 넣으면 "
+            "나에게 맞는 추천이 나와요.")
 
 already = sd["today"]["already"]
 if already:
-    st.caption("이미 마신 것: " + " · ".join(f"{a['time']} {a['sips']:g}모금" if "sips" in a else
-                                          f"{a['time']} {a['mg']:g}mg" for a in already))
+    st.caption("이미 마신 것: " + " · ".join(f"{a['time']} {amount_text(a)}" for a in already))
 st.caption(f"오늘 총 {result.cap.total_mg:.0f}mg (하루 상한의 {result.cap.ratio * 100:.0f}%) · "
            f"졸면 안 되는 시간의 졸림 −{plan.sleepiness_reduction * 100:.0f}% · "
            f"예상 수면 감소 {max(plan.sleep_loss_min, 0):.0f}분")
@@ -81,14 +66,14 @@ if result.cap.level != "ok":
     st.warning(f"오늘 섭취가 하루 상한의 {result.cap.ratio * 100:.0f}%예요.")
 for note in result.notes:
     st.warning(note)
-st.page_link("page_day.py", label="입력 고치기 (잠 · 마신 것 · 일정 · 음료)", icon="📅")
+st.page_link("page_day.py", label="입력 고치기 (잠 · 마신 것 · 일정 · 음료) →")
 
-# ── 🔔 앱 알림 (로그인 + 오늘) — 서버가 그 시각에 핸드폰으로 보낸다 (브라우저를 닫아도 됨) ──
-KIND_SHORT = {"drink": "☕ 마시기", "stop": "⛔ 금지 시작", "feedback": "📝 졸림 묻기", "test": "🔔 테스트"}
+# ── 앱 알림 (로그인 + 오늘) — 서버가 그 시각에 핸드폰으로 보낸다 (브라우저를 닫아도 됨) ──
+KIND_SHORT = {"drink": "마시기", "stop": "금지 시작", "feedback": "졸림 묻기", "test": "테스트"}
 STATUS = {"pending": "대기", "sending": "보내는 중", "sent": "보냄 ✓", "failed": "실패"}
 if s is not None and state.is_today():
     st.divider()
-    st.subheader("🔔 알림")
+    st.subheader("알림")
     if "push_devices" not in st.session_state:
         try:
             st.session_state.push_devices = store.push_devices(s)
@@ -99,7 +84,7 @@ if s is not None and state.is_today():
                                              + feedback_notifications(sc.windows), now_h=sc.now_h) if i.send],
                         key=lambda i: i.at)
     if not st.session_state.push_devices:
-        st.info("먼저 화면 맨 위 **🔔 알림 켜기**를 눌러 이 기기에서 알림을 허용해 주세요.  \n"
+        st.info("먼저 화면 맨 위 **알림 켜기**를 눌러 이 기기에서 알림을 허용해 주세요.  \n"
                 "아이폰은 사파리 아래 **[공유] → [홈 화면에 추가]** 한 뒤, 홈 화면의 '카페인' 앱을 열어 켜야 해요.")
         if st.button("알림 켰어요 — 다시 확인"):
             st.session_state.pop("push_devices", None)
@@ -138,7 +123,7 @@ if s is not None and state.is_today():
 # ── 지금 졸림 기록 (로그인했을 때) ──
 if s is not None and state.is_today():
     st.divider()
-    st.subheader("📝 지금 얼마나 졸려요?")
+    st.subheader("지금 얼마나 졸려요?")
     st.caption("수업·시험처럼 중요한 시간에 남겨 주세요. 예측과 실제를 비교해 나중에 나에게 맞게 보정하는 데 써요.")
     kss = st.select_slider("졸림 (1~9)", options=list(range(1, 10)), value=5, key="kss",
                            format_func=lambda x: f"{x} · {KSS_LABEL[x]}" if x in KSS_LABEL else str(x))
@@ -163,14 +148,14 @@ if s is not None and state.is_today():
 
 # ── 더 보기 (펼쳐서) ──
 st.divider()
-with st.expander("📈 그래프로 보기 — 몸속 카페인 · 졸림 정도"):
+with st.expander("그래프로 보기 — 몸속 카페인 · 졸림 정도"):
     top_chart, bottom_chart = build_charts(build_frames(sc, result))
     st.altair_chart(top_chart)
     st.altair_chart(bottom_chart)
     st.caption("그래프에 마우스를 올리면 그 시각의 값을 볼 수 있어요. "
                "회색 띠 = 졸면 안 됨·집중 시간대, 점선 = 취침·금지 시각")
 
-with st.expander("📊 자세한 수치"):
+with st.expander("자세한 수치"):
     m1, m2 = st.columns(2)
     m3, m4 = st.columns(2)
     m1.metric(f"오늘 총 섭취 (상한 {result.cap.cap_mg:.0f}mg)",
@@ -188,7 +173,7 @@ with st.expander("📊 자세한 수치"):
 
 # 로그인 안 한 사람용: ntfy 앱으로 받기 (로그인하면 위의 앱 알림을 쓴다)
 if s is None:
-    with st.expander("🔔 핸드폰 알림 받기 (ntfy 앱 · 로그인 없이)", expanded=bool(st.query_params.get("ntfy"))):
+    with st.expander("핸드폰 알림 받기 (ntfy 앱 · 로그인 없이)", expanded=bool(st.query_params.get("ntfy"))):
         st.caption("로그인하면 앱 설치 없이 바로 알림을 받을 수 있어요. 로그인 없이 쓰려면 ntfy 앱으로 받아요.")
         topic = st.text_input(
             "ntfy 알림 채널 이름", value=st.query_params.get("ntfy", ""), type="password", key="ntfy_topic",
@@ -210,7 +195,7 @@ if s is None:
             if items:
                 st.dataframe(pd.DataFrame([{
                     "시각": i.at.strftime("%H:%M"),
-                    "상태": "✅ 보낼 예정" if i.send else f"⏭️ {i.reason}",
+                    "상태": "보낼 예정" if i.send else f"건너뜀 · {i.reason}",
                     "알림": f"{i.notification.title} — {i.notification.message}",
                 } for i in items]), hide_index=True, width="stretch")
             to_send = [i for i in items if i.send]

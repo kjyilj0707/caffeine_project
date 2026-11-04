@@ -126,3 +126,52 @@ def size_label(d) -> str:
 def beverage_spec(d) -> dict:
     """시나리오 beverage 형식. db에 원래 이름을 남겨 다음에 같은 음료를 다시 골라 준다."""
     return {"name": d.label, "mg": d.mg, "ml": d.ml, "db": d.label}
+
+
+# ── 음료 카페인 보기 ──
+DRINK_GROUPS = {"에너지음료": {"레드불", "몬스터", "핫식스"},
+                "편의점 커피": {"맥심", "레쓰비", "스타벅스 RTD", "바리스타룰스"},
+                "차·탄산·믹스": {"일반", "코카콜라", "펩시"}}
+
+
+def drink_group(brand: str) -> str:
+    """브랜드 → 분류 (카페 / 편의점 커피 / 에너지음료 / 차·탄산·믹스)."""
+    return next((g for g, brands in DRINK_GROUPS.items() if brand in brands), "카페")
+
+
+# ── 하루 입력 다이얼 ──
+LATENCY_OPTIONS = ["모름"] + list(range(0, 125, 5))           # 잠들기까지 (분)
+WINDOW_HINT = {"졸면 안 됨": "시험·수업·운전", "집중": "가장 어려운 과목·발표"}
+# 양 휠: 오른쪽 단위를 바꾸면 왼쪽 숫자 목록이 바뀜. start = 그 단위로 바꿨을 때 처음 가리킬 칸
+_CUPS = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+_SIPS = list(range(1, 41))
+_MG = list(range(10, 410, 10))
+
+
+def amount_units(brand=None) -> List[dict]:
+    """잔 단위는 브랜드 컵 크기로 (스타벅스면 Short·Tall·Venti 잔, 모르면 스몰·기본·빅 잔) + 모금 + mg."""
+    from caffeine_engine.convert import cup_sizes
+    cups = [{"name": f"{c.name} 잔" if brand else f"{c.key} 잔", "options": [f"{x:g}" for x in _CUPS], "start": 1,
+             "values": _CUPS, "cup": {"size": c.key, "cup_ml": c.ml, "cup_name": c.name}}
+            for c in cup_sizes(brand)]
+    return cups + [{"name": "모금", "options": [str(x) for x in _SIPS], "start": 7, "values": _SIPS},
+                   {"name": "mg", "options": [str(x) for x in _MG], "start": 9, "values": _MG}]
+
+
+AMOUNT_UNITS = amount_units()
+
+
+def amount_entry(time_text: str, unit: int, value: float, units: Optional[List[dict]] = None) -> dict:
+    """양 휠의 (단위, 값) → 시나리오 already 한 줄. 잔이면 {"cups", "size", "cup_ml", "cup_name"}, 아니면 {"sips"} / {"mg"}."""
+    u = (units or AMOUNT_UNITS)[unit]
+    if "cup" in u:
+        return {"time": time_text, "cups": float(value), **u["cup"]}
+    return {"time": time_text, "sips" if u["name"] == "모금" else "mg": float(value)}
+
+
+def amount_text(a: dict) -> str:
+    if "cups" in a:
+        name = a.get("cup_name") or a.get("size", "기본")
+        size = f"{name} 사이즈" if name in ("스몰", "기본", "빅") else name
+        return f"{size} {a['cups']:g}잔"
+    return f"{a['sips']:g}모금" if "sips" in a else f"{a['mg']:g}mg"

@@ -48,34 +48,34 @@ def to_datetime(time_h: float, start: datetime) -> datetime:
 
 
 def plan_notifications(plan: Plan, servings: Sequence[Serving], bed_h: float) -> List[Notification]:
-    """☕ 마실 시각마다 1개 + ⛔ 절대 컷오프 1개."""
+    """마실 시각마다 1개 + 절대 컷오프 1개."""
     out: List[Notification] = []
     for i, (dose, s) in enumerate(zip(plan.new_doses, servings)):
         last = i == len(plan.new_doses) - 1
         tail = " · 오늘 마지막 잔이에요" if last else ""
         out.append(Notification(
             time_h=dose.time_h, kind="drink",
-            title=f"☕ {h_to_hhmm(dose.time_h)} {s.beverage.name} {s.sips}모금",
-            message=f"약 {s.mg_actual:.0f}mg ({s.ml:.0f}ml){tail}",
+            title=f"{h_to_hhmm(dose.time_h)} {s.beverage.name} {s.cup} · {s.minutes}분 동안",
+            message=f"약 {s.ml:.0f}ml · {s.mg_actual:.0f}mg · {s.pace}{tail}",
             tags=("coffee",), priority=4))
     if plan.cutoff_h is not None:
         out.append(Notification(
             time_h=plan.cutoff_h, kind="stop",
-            title="⛔ 지금부터 카페인 금지",
+            title="지금부터 카페인 금지",
             message=f"{h_to_hhmm(bed_h)} 취침 · 수면 보호를 위해 한 모금도 마시지 마세요",
             tags=("no_entry",), priority=3))
     return sorted(out, key=lambda n: n.time_h)
 
 
 def feedback_notifications(windows) -> List[Notification]:
-    """📝 '졸면 안 되는 시간' 한가운데에 '지금 얼마나 졸려요?' — 예측과 실제를 비교할 정답 데이터 모으기."""
-    return [Notification(time_h=(w.start_h + w.end_h) / 2, kind="feedback", title="📝 지금 얼마나 졸려요?",
+    """'졸면 안 되는 시간' 한가운데에 '지금 얼마나 졸려요?' — 예측과 실제를 비교할 정답 데이터 모으기."""
+    return [Notification(time_h=(w.start_h + w.end_h) / 2, kind="feedback", title="지금 얼마나 졸려요?",
                          message="앱을 열어 1~9점으로 남겨 주세요 (10초)", tags=("memo",), priority=3)
             for w in windows if w.kind == "must_not_sleep"]
 
 
 def make_test_notification(now_h: float, minutes: int = 1) -> Notification:
-    return Notification(time_h=now_h + minutes / 60, kind="test", title="🔔 카페인 측정기 테스트 알림",
+    return Notification(time_h=now_h + minutes / 60, kind="test", title="카페인 측정기 테스트 알림",
                         message=f"{minutes}분 전에 예약한 알림이에요. 이게 보이면 알림 설정 완료!",
                         tags=("bell",), priority=3)
 

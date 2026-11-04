@@ -16,11 +16,12 @@ from . import params
 class Beverage:
     name: str
     mg_per_ml: float
+    serving_ml: Optional[float] = None   # 메뉴 한 잔 용량 (알면 '이 메뉴 2/3잔'처럼 안내)
 
     @classmethod
     def from_serving(cls, name: str, mg: float, ml: float) -> "Beverage":
         """메뉴 정보로 만들기. 예: Beverage.from_serving("아메리카노 톨", 150, 355)"""
-        return cls(name, mg / ml)
+        return cls(name, mg / ml, ml)
 
 
 def default_beverages():
@@ -38,18 +39,54 @@ class Serving:
     sips: int
     ml: float
     mg_actual: float
+    duration_h: float = 0.0
+    cup: str = ""        # 예: "스몰 사이즈 1잔", "반 잔"
+    pace: str = ""       # 예: "2~3분에 한 모금"
+
+    @property
+    def minutes(self) -> int:
+        return round(self.duration_h * 60)
 
 
 def _sip(sip_ml: Optional[float]) -> float:
     return sip_ml if sip_ml is not None else params.value("conversion", "sip_ml")
 
 
-def to_serving(mg: float, beverage: Beverage, sip_ml: Optional[float] = None) -> Serving:
-    """목표 mg → 몇 모금 (최소 1모금)."""
+_FRACTIONS = [(0.25, "1/4"), (1 / 3, "1/3"), (0.5, "반"), (2 / 3, "2/3"), (0.75, "3/4"), (1.0, "1"),
+              (1.5, "1.5"), (2.0, "2")]
+
+
+def cup_text(ml: float, beverage: Beverage) -> str:
+    """ml → 사람이 알아듣는 잔 단위. 메뉴 용량을 알면 그 메뉴 기준('2/3잔'), 아니면 카페 컵 크기 기준('스몰 사이즈 1잔')."""
+    if beverage.serving_ml:
+        prefix, size = "", beverage.serving_ml
+    else:   # 그 양이 들어가는 가장 작은 컵(스몰→기본→빅)을 고르고, 그 컵의 몇 분의 몇인지로
+        cups = cup_sizes()
+        cup = next((c for c in cups if c.ml >= ml * 0.9), cups[-1])
+        prefix, size = f"{cup.key} 사이즈 ", cup.ml
+    _, text = min(((abs(f * size - ml) / ml + (0 if f == 1 else 0.03), t) for f, t in _FRACTIONS),
+                  key=lambda x: x[0])
+    return f"{prefix}{text} 잔" if text == "반" else f"{prefix}{text}잔"
+
+
+def pace_text(sips: int, duration_h: float) -> str:
+    """'30분 동안 13모금' → '2~3분에 한 모금' (사람이 세지 않아도 되는 속도 안내)."""
+    if duration_h <= 0 or sips <= 1:
+        return ""
+    per = duration_h * 60 / sips
+    if per < 1:
+        return f"1분에 {round(1 / per)}모금"
+    lo, hi = int(per), int(per) + (0 if per == int(per) else 1)
+    return f"{lo}분에 한 모금" if lo == hi else f"{lo}~{hi}분에 한 모금"
+
+
+def to_serving(mg: float, beverage: Beverage, sip_ml: Optional[float] = None, duration_h: float = 0.0) -> Serving:
+    """목표 mg → 마실 양(ml) · 잔 단위 · (나눠 마시면) 속도. 모금 수는 속도 안내용으로만."""
     sip = _sip(sip_ml)
     sips = max(1, round(mg / beverage.mg_per_ml / sip))
     ml = sips * sip
-    return Serving(beverage, mg, sips, ml, ml * beverage.mg_per_ml)
+    return Serving(beverage, mg, sips, ml, ml * beverage.mg_per_ml, duration_h, cup_text(ml, beverage),
+                   pace_text(sips, duration_h))
 
 
 def from_sips(sips: float, beverage: Beverage, sip_ml: Optional[float] = None) -> float:
@@ -101,3 +138,29 @@ def load_beverage_db(path: Path = BEVERAGES_PATH) -> List[DrinkEntry]:
         rec["mg"] = float(rec["mg"])
         out.append(DrinkEntry(**rec))
     return out
+
+
+# ── 브랜드별 컵 크기 (beverages.yaml cup_sizes, 조사일 2026-11-04) ──
+@dataclass(frozen=True)
+class Cup:
+    key: str      # 스몰 / 기본 / 빅
+    name: str     # 브랜드의 사이즈 이름 (예: Tall)
+    ml: float
+
+    @property
+    def label(self) -> str:
+        """'기본(Tall 355ml)' — 이름이 스몰/기본/빅과 같으면 'ml'만"""
+        inner = f"{self.ml:g}ml" if self.name == self.key else f"{self.name} {self.ml:g}ml"
+        return f"{self.key}({inner})"
+
+
+def cup_sizes(brand: Optional[str] = None) -> List[Cup]:
+    """브랜드의 스몰·기본·빅 컵 (없는 사이즈는 뺌). 모르는 브랜드면 '그 외'."""
+    table = yaml.safe_load(BEVERAGES_PATH.read_text(encoding="utf-8"))["cup_sizes"]
+    row = table.get(brand) or table["그 외"]
+    return [Cup(k, str(row[k][0]), float(row[k][1])) for k in ("스몰", "기본", "빅") if k in row]
+
+
+def cup_ml(key: str, brand: Optional[str] = None) -> float:
+    cups = {c.key: c.ml for c in cup_sizes(brand)}
+    return cups.get(key) or {c.key: c.ml for c in cup_sizes()}[key]

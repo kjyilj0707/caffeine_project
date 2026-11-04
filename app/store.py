@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 from caffeine_engine import params
+from caffeine_engine.convert import cup_ml
 from caffeine_engine.notify import local_tz, to_datetime
 from caffeine_engine.scenario import from_dict
 from caffeine_engine.timeutil import h_to_hhmm
@@ -101,8 +102,9 @@ def intakes_to_rows(scenario_dict: Dict, start: datetime) -> List[Dict]:
     entries = scenario_dict["today"].get("already", [])
     rows = []
     for entry, dose in zip(entries, sc.already):
+        ml = entry["cups"] * (entry.get("cup_ml") or cup_ml(entry.get("size", "기본"))) if "cups" in entry else None
         rows.append({"taken_at": _ts(to_datetime(dose.time_h, start)), "mg": round(dose.mg, 1),
-                     "sips": entry.get("sips"), "beverage_label": sc.beverage.name})
+                     "sips": entry.get("sips"), "ml": ml, "beverage_label": sc.beverage.name})
     return rows
 
 
@@ -125,7 +127,8 @@ def plan_summary(result) -> Dict:
         return out
     out.update({
         "doses": [{"time": h_to_hhmm(d.time_h), "time_h": round(d.time_h, 3), "mg": round(d.mg, 1),
-                   "sips": s.sips, "ml": round(s.ml, 1)} for d, s in zip(plan.new_doses, result.servings)],
+                   "sips": s.sips, "ml": round(s.ml, 1), "duration_h": d.duration_h, "cup": s.cup}
+                  for d, s in zip(plan.new_doses, result.servings)],
         "last_dose": h_to_hhmm(plan.last_dose_h) if plan.last_dose_h is not None else None,
         "cutoff": h_to_hhmm(plan.cutoff_h) if plan.cutoff_h is not None else None,
         "total_mg": round(plan.total_mg, 1), "max_residual_mg": round(plan.max_residual_mg, 2),
@@ -291,7 +294,7 @@ def range_summary(session: Session, first: date, last: date, transport: Optional
 
 # ── 앱 알림 (Step 4-5) ──
 def push_devices(session: Session, transport: Optional[Transport] = None) -> List[Dict]:
-    """알림 받을 기기 목록 (화면 맨 위 '🔔 알림 켜기'로 등록한 기기)."""
+    """알림 받을 기기 목록 (화면 맨 위 '알림 켜기'로 등록한 기기)."""
     return rest(session, "GET", "push_subscriptions?select=id,user_agent,created_at&order=created_at.asc",
                 transport=transport)
 

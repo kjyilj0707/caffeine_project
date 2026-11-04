@@ -58,10 +58,37 @@ def test_report_page(monkeypatch):
     at = AppTest.from_file(str(ROOT / "app" / "streamlit_app.py"), default_timeout=60).run()
     at.switch_page("page_report.py").run()
     assert not at.exception
-    labels = [m.label for m in at.metric]
-    assert labels[:2] == ["하루 평균 마신 양", "추천대로 마신 잔"]
-    assert any("1 / 2" == m.value for m in at.metric)
-    at.radio(key="report_period").set_value("하루").run()
-    assert not at.exception and any("금지 시각 16:00" in c.value for c in at.caption)
-    at.radio(key="report_period").set_value("한 달").run()
+    html = " ".join(h.proto.body for h in at.get("html"))
+    assert "카페인" in html and "하루 평균" in html and "1/2" in html                # 링 카드 · 추천대로 1/2잔
+    assert "피드백" in html and "졸림 기록 2/10개" in html                         # Step 5 개인화 ①
+    assert "rc-gauge" in html                                                     # 졸림 색 막대
+    assert not any("모델 비교를 계산하지 못했어요" in c.value for c in at.caption)
+    at.button_group(key="report_period").set_value(["하루"]).run()
+    html = " ".join(h.proto.body for h in at.get("html"))
+    assert not at.exception and "시간대별 마신 양" in html and "16:00" in html and "못 지킴" in html
+    at.button_group(key="report_period").set_value(["한 달"]).run()
     assert not at.exception and any("2026년 11월" in m.value for m in at.markdown)
+    assert any(b.key == "go_feedback" for b in at.button)                       # 피드백 입력 화면으로 가는 버튼
+
+
+def test_report_page_shows_demo_when_logged_out():
+    from streamlit.testing.v1 import AppTest
+    at = AppTest.from_file(str(ROOT / "app" / "streamlit_app.py"), default_timeout=60).run()
+    at.switch_page("page_report.py").run()
+    assert not at.exception and any("예시 기록" in i.value for i in at.info)
+    assert "하루 평균" in " ".join(h.proto.body for h in at.get("html"))
+
+
+def test_feedback_page_saves_sleepiness(monkeypatch):
+    # 리포트의 기간 버튼(세그먼트)이 있는 화면에서 이동하면 테스트 도구가 멈추는 버그가 있어 피드백 화면만 따로 연다
+    from streamlit.testing.v1 import AppTest
+    monkeypatch.setattr(account, "current_session", lambda: SESSION)
+    monkeypatch.setattr(store, "load_day", lambda s, day: ({}, []))
+    monkeypatch.setattr(store, "report_rows", lambda s, a, b: ROWS)
+    saved_kss = []
+    monkeypatch.setattr(store, "add_sleepiness", lambda s, k, n: saved_kss.append((k, n)))
+    at = AppTest.from_file(str(ROOT / "app" / "streamlit_app.py"), default_timeout=60).run()
+    at.switch_page("page_feedback.py").run()
+    assert not at.exception and any("지금 얼마나 졸려요" in h.value for h in at.subheader)
+    next(b for b in at.button if b.key == "fb_save").click().run()
+    assert not at.exception and saved_kss == [(5, "")]                           # 선 기본값 = 가운데 = 5

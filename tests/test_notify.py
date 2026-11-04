@@ -24,7 +24,7 @@ def kst(y, mo, d, h, mi=0):
 
 
 def exam_day():
-    sc = load(ROOT / "scenarios" / "exam_day.yaml")  # 13:45 커피 13모금, 21:30부터 금지, 23:00 취침
+    sc = load(ROOT / "scenarios" / "exam_day.yaml")  # 13:45 커피 스몰 2/3잔 30분 동안, 21:30부터 금지, 23:00 취침
     r = run_day(sc.profile, sc.sleeps, sc.windows, bed_h=sc.bed_h, now_h=sc.now_h,
                 already=sc.already, beverage=sc.beverage, sip_ml=sc.sip_ml)
     return sc, r
@@ -34,7 +34,7 @@ def test_plan_becomes_drink_and_stop_notifications():
     sc, r = exam_day()
     notes = plan_notifications(r.plan, r.servings, sc.bed_h)
     assert [n.kind for n in notes] == ["drink", "stop"]
-    assert notes[0].title == "☕ 13:45 커피 13모금"
+    assert notes[0].title == "13:45 커피 스몰 사이즈 2/3잔 · 30분 동안"     # 몇 모금 대신 잔 크기 + 마시는 시간
     assert "마지막 잔" in notes[0].message
     assert notes[1].time_h == r.plan.cutoff_h and "금지" in notes[1].title
 
@@ -86,7 +86,7 @@ def test_payload_and_publish_with_fake_transport():
 
     assert publish("caffeine-abc123", item, transport=fake)["id"] == "x1"
     assert sent["url"] == "https://ntfy.sh"
-    assert sent["body"]["title"] == "🔔 카페인 측정기 테스트 알림"  # 한글이 깨지지 않음
+    assert sent["body"]["title"] == "카페인 측정기 테스트 알림"  # 한글이 깨지지 않음
 
 
 @pytest.mark.parametrize("topic,ok", [("caffeine-5cpt0dzk", True), ("my_topic-1", True), ("", False),

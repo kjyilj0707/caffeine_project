@@ -13,7 +13,7 @@ from typing import List, Optional
 
 import yaml
 
-from .convert import Beverage, default_beverages, from_sips
+from .convert import Beverage, cup_ml, default_beverages, from_ml, from_sips
 from .fatigue import SleepEpisode
 from .optimizer import Window
 from .pk import Dose
@@ -88,7 +88,12 @@ def from_dict(data: dict) -> Scenario:
     already = []
     for a in today.get("already", []):
         drink = _parse_beverage(a["beverage"]) if a.get("beverage") else beverage
-        mg = a["mg"] if "mg" in a else from_sips(a["sips"], drink, sip_ml)
+        if "mg" in a:
+            mg = a["mg"]
+        elif "cups" in a:     # 카페 잔 크기 (스몰·기본·빅, 브랜드별 ml) × 잔 수 → ml → mg
+            mg = from_ml(a["cups"] * (a.get("cup_ml") or cup_ml(a.get("size", "기본"))), drink)
+        else:
+            mg = from_sips(a["sips"], drink, sip_ml)
         already.append(Dose(_today(a["time"], wake), mg))
 
     return Scenario(

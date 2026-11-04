@@ -146,3 +146,19 @@ def test_card_shows_already_consumed():
     r = run_day(Profile(age=24, weight_kg=70), SLEEPS, WINDOWS, bed_h=23.0, now_h=9.0,
                 already=[Dose(9.0, 100)])
     assert "이미 마심: 09:00 100mg" in format_card(r)
+
+
+def test_paced_dose_and_cup_text():
+    from caffeine_engine.convert import cup_text, pace_text
+    from caffeine_engine.pk import Dose, amount_at, pieces
+    paced = Dose(10.0, 120, 0.5)                                   # 30분 동안 나눠 마시기
+    parts = pieces(paced)
+    assert len(parts) == 3 and sum(p.mg for p in parts) == pytest.approx(120) and parts[-1].time_h < paced.end_h
+    assert amount_at(10.25, [paced]) < amount_at(10.25, [Dose(10.0, 120)])   # 천천히 마시면 초반 최고치가 낮음
+    assert amount_at(20.0, [paced]) == pytest.approx(amount_at(20.0, [Dose(10.0, 120)]), rel=0.05)
+    # 브랜드를 모를 때 컵 = 스몰 355 · 기본 520 · 빅 670 (beverages.yaml cup_sizes '그 외')
+    assert cup_text(355, COFFEE) == "스몰 사이즈 1잔" and cup_text(520, COFFEE) == "기본 사이즈 1잔"
+    assert cup_text(228, COFFEE) == "스몰 사이즈 2/3잔" and cup_text(175, Beverage("홍차", 0.1, 355)) == "반 잔"
+    assert cup_text(1300, COFFEE) == "빅 사이즈 2잔"
+    assert cup_text(240, Beverage.from_serving("톨", 150, 355)) == "2/3잔"   # 메뉴 용량을 알면 그 메뉴 기준
+    assert pace_text(13, 0.5) == "2~3분에 한 모금" and pace_text(30, 0.25) == "1분에 2모금"
