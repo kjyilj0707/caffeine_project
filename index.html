@@ -92,7 +92,7 @@
         <input class="field" id="up-email" type="email" placeholder="이메일" autocomplete="email" required />
         <input class="field" id="up-password" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="new-password"
                minlength="6" required />
-        <p class="note">가입하면 확인 메일이 와요. 메일의 링크를 한 번 누르면 끝 — 그다음부터는 이메일과 비밀번호로 로그인해요.</p>
+        <p class="note">가입하면 메일로 숫자 코드가 와요. 코드를 한 번 넣으면 끝 — 그다음부터는 이메일과 비밀번호로 로그인해요.</p>
         <button class="big" type="submit">가입하기</button>
         <button class="sub" type="button" id="go-code-signup">비밀번호 없이 · 메일 코드로 가입</button>
       </form>
@@ -173,10 +173,10 @@
     showAuth(session);
 
     const KO = { "Invalid login credentials": "이메일 또는 비밀번호가 맞지 않아요. 비밀번호를 정한 적이 없으면 아래 [메일 코드로 로그인]을 눌러 주세요.",
-                 "Email not confirmed": "가입 확인 메일의 링크를 먼저 눌러 주세요.",
+                 "Email not confirmed": "가입 확인이 아직이에요. [회원가입]에서 같은 이메일로 다시 가입하면 확인 코드를 다시 보내요.",
                  "User already registered": "이미 가입된 이메일이에요. [로그인] 또는 [메일 코드로]를 써 주세요.",
                  "Signups not allowed for otp": "새 가입이 막혀 있어요. 관리자에게 알려 주세요.",
-                 "Token has expired or is invalid": "코드가 틀렸거나 시간이 지났어요. [메일 코드로]를 다시 눌러 주세요.",
+                 "Token has expired or is invalid": "코드가 틀렸거나 시간이 지났어요. ← 를 눌러 코드를 다시 받아 주세요.",
                  "Password should be at least 6 characters.": "비밀번호는 6자 이상이어야 해요." };
     // 같은 메일을 너무 자주 요청하면 Supabase가 잠시 막는다 (예: "For security purposes, you can only request this after 37 seconds.")
     const wait = (m) => (m.match(/after (\d+) seconds/) || [])[1];
@@ -198,7 +198,12 @@
         email: $("up-email").value.trim(), password: $("up-password").value, options: { emailRedirectTo: redirect } });
       if (error) return say(error);
       if (data.user && data.user.identities && data.user.identities.length === 0) return say({ message: "User already registered" });
-      msg(data.session ? "가입했어요." : "확인 메일을 보냈어요. 메일의 링크를 누르면 가입이 끝나요 (한 번만). 그다음부터는 [로그인]에서 이메일과 비밀번호로 들어와요.");
+      if (data.session) return msg("가입했어요.");
+      // 가입 확인도 링크 대신 코드로: 메일의 숫자 코드를 넣으면 가입 끝 (비밀번호는 이미 정했으니 다시 묻지 않음)
+      codeEmail = $("up-email").value.trim();
+      step("step-code", { tabs: false });
+      $("code-note").textContent = `${codeEmail}로 보낸 가입 확인 코드를 넣어 주세요. 한 번만 하면 돼요.`;
+      $("in-code").focus();
     });
     // 메일 코드로 가입·로그인 (비밀번호 없이 / 잊었을 때) → 들어오면 비밀번호 정하기
     async function sendCode(emailInput) {
@@ -210,7 +215,7 @@
       if (error) { sessionStorage.removeItem("askPassword"); return say(error); }
       codeEmail = email;
       step("step-code", { tabs: false });
-      $("code-note").textContent = `${email}로 보낸 숫자 코드를 넣어 주세요. (메일의 링크를 눌러도 돼요)`;
+      $("code-note").textContent = `${email}로 보낸 숫자 코드를 넣어 주세요.`;
       $("in-code").focus();
     }
     $("go-code-login").onclick = () => sendCode("in-email");
