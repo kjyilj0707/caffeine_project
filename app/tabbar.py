@@ -13,8 +13,8 @@ TABS = [
     ("page_plan.py", "오늘 추천", ":material/home:"),
     ("page_day.py", "하루 입력", ":material/edit_calendar:"),
     ("page_report.py", "리포트", ":material/bar_chart:"),
-    ("page_drinks.py", "음료", ":material/local_cafe:"),
-    ("page_profile.py", "프로필", ":material/person:"),
+    ("page_drinks.py", "브랜드별", ":material/local_cafe:"),
+    ("page_profile.py", "설정", ":material/person:"),
 ]
 BAR_H = 64  # px, 본문 아래 여백도 이만큼 + α
 

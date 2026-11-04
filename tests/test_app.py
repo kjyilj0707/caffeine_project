@@ -77,7 +77,7 @@ def test_plan_page_shows_doses_first_and_switches_preset():
 def test_bottom_tab_bar_has_five_tabs_in_order():
     at = _app().run()
     labels = [t.proto.label for t in at.get("page_link")]
-    assert labels[:5] == ["오늘 추천", "하루 입력", "리포트", "음료", "프로필"]   # 탭 바가 페이지보다 먼저 그려짐
+    assert labels[:5] == ["오늘 추천", "하루 입력", "리포트", "브랜드별", "설정"]   # 탭 바가 페이지보다 먼저 그려짐
     assert len(at.sidebar.children) == 0                                     # 왼쪽 메뉴 없음
 
 

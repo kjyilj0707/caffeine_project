@@ -47,7 +47,7 @@ if order != "브랜드순":
     view = view.sort_values("카페인(mg)", ascending=order == "카페인 적은 순", kind="stable")
 
 view = view.assign(**{"하루 상한 대비": view["카페인(mg)"] / cap})
-st.caption(f"{len(view)}개 · 하루 상한 {cap:.0f}mg 기준 (내 프로필에서 바뀜)")
+st.caption(f"{len(view)}개 · 하루 상한 {cap:.0f}mg 기준 (설정에서 바뀜)")
 st.dataframe(
     view[["브랜드", "메뉴", "온도", "사이즈", "용량(ml)", "카페인(mg)", "하루 상한 대비", "100ml당(mg)", "출처", "메모", "링크"]],
     hide_index=True, width="stretch", height=560,

@@ -53,7 +53,7 @@ else:
     st.caption(f"{bev_name} 기준 · 한 번에 들이켜지 말고 정해진 시간 동안 나눠 마시기"
                + (f" · {h_to_hhmm(plan.last_dose_h)} 이후엔 추천 외 카페인 금지" if plan.last_dose_h is not None else ""))
 if d["example"]:
-    st.info("지금은 **예시 값**으로 보여주고 있어요. **프로필 → 하루 입력** 순서로 내 정보를 넣으면 "
+    st.info("지금은 **예시 값**으로 보여주고 있어요. **설정 → 하루 입력** 순서로 내 정보를 넣으면 "
             "나에게 맞는 추천이 나와요.")
 
 already = sd["today"]["already"]
