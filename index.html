@@ -120,6 +120,12 @@
     import { mount } from "https://cdn.jsdelivr.net/npm/@stlite/browser@1.11.0/build/stlite.js";
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm";
 
+    // 처음 연 앱 주소. 앱 안에서 탭을 옮기면 주소가 '…/page_report'처럼 바뀌는데 GitHub Pages엔 그런 파일이 없어
+    // 그대로 새로고침하면 404가 난다 → 다시 불러올 때는 항상 이 주소로 (app/theme.py도 window.__APP_URL을 씀)
+    const APP_URL = location.origin + location.pathname;
+    window.__APP_URL = APP_URL;
+    const reloadApp = () => location.replace(APP_URL);
+
     // ── 로그인 (Step 4-2) ──
     // 공개용 키라 저장소에 있어도 됨: 데이터 보호는 서버의 RLS 규칙(내 데이터는 나만)이 한다
     const SUPABASE_URL = "https://arqruewigqgzbmlsgjad.supabase.co";
@@ -166,7 +172,7 @@
         openSheet("step-setpw", { tabs: false });
       }
     }
-    const redirect = location.origin + location.pathname;
+    const redirect = APP_URL;
 
     // 메일 링크로 돌아온 경우 주소에 담긴 로그인 정보를 여기서 처리한다
     const { data: { session } } = await supabase.auth.getSession();
@@ -382,8 +388,8 @@
     // 로그인·로그아웃은 화면을 새로 열어 Python이 처음부터 새 상태로 시작하게 하고,
     // 1시간마다 오는 열쇠 갱신은 파일만 다시 써준다 (Python은 다음 화면 갱신 때 새 열쇠를 읽음)
     supabase.auth.onAuthStateChange((event, s) => {
-      if (event === "SIGNED_IN" && !session) location.reload();
-      else if (event === "SIGNED_OUT") location.reload();
+      if (event === "SIGNED_IN" && !session) reloadApp();
+      else if (event === "SIGNED_OUT") reloadApp();
       else if (event === "TOKEN_REFRESHED") app.writeFile(SESSION_FILE, sessionData(s));
     });
   </script>

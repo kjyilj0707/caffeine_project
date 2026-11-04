@@ -61,5 +61,6 @@ def apply(mode: str) -> None:
       }}
     }}
     w.document.cookie = "{COOKIE}={MODES[mode]}; path=/; max-age=31536000; SameSite=Lax";
-    w.location.reload();
+    // 웹판(GitHub Pages)은 탭 주소(…/page_x)로 새로고침하면 404 → 처음 연 앱 주소로. 로컬 서버는 그냥 새로고침
+    if (w.__APP_URL) w.location.replace(w.__APP_URL); else w.location.reload();
     </script>""", height=0)
