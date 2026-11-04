@@ -16,22 +16,50 @@
   <style>
     body { margin: 0; background: #ffffff; }
     #loading { font-family: system-ui, sans-serif; color: #52514e; padding: 48px 16px; text-align: center; }
-    /* 로그인 바 (Step 4-2) */
-    /* Streamlit 화면은 자기 상자를 꽉 채우므로(position: absolute), 바를 맨 위에 고정하고
-       앱 상자(#root)는 바 높이만큼 아래에서 시작하게 한다 (높이는 아래 자바스크립트가 맞춤) */
+    /* 로그인 바: 한 줄짜리. 로그인·가입은 따로 여는 창(#auth-sheet)에서 */
+    /* Streamlit 화면은 자기 상자를 꽉 채우므로, 바를 맨 위에 고정하고 앱 상자(#root)는 바 높이만큼 아래에서 시작 */
+    :root { --bar-bg: #f2f2f7; --bar-fg: #1c1c1e; --muted: #8a8a8f; --line: rgba(0,0,0,.1);
+            --sheet-bg: #ffffff; --field: #f2f2f7; --acc: #34C759; color-scheme: light; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) { --bar-bg: #1c1c1e; --bar-fg: #f2f2f7; --muted: #8e8e93; --line: rgba(255,255,255,.12);
+                                        --sheet-bg: #1c1c1e; --field: #2c2c2e; color-scheme: dark; }
+    }
     #auth-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; box-sizing: border-box;
-                font-family: system-ui, sans-serif; font-size: 14px; color: #31333f; background: #f0f0ec;
-                border-bottom: 1px solid #d9d9d4; padding: 8px 16px; display: flex; flex-wrap: wrap;
-                gap: 8px; align-items: center; }
-    #root { position: fixed; top: var(--auth-bar-h, 46px); left: 0; right: 0; bottom: 0; overflow: auto; }
-    #auth-bar form { display: flex; gap: 6px; margin: 0; }
-    #auth-bar input { font: inherit; padding: 5px 8px; border: 1px solid #c9c9c4; border-radius: 6px; min-width: 0; }
-    #auth-bar button { font: inherit; padding: 5px 10px; border: 1px solid #c9c9c4; border-radius: 6px;
-                       background: #fff; cursor: pointer; }
-    #auth-msg { color: #52514e; }
-    #auth-bar form { flex-wrap: wrap; }
-    #auth-bar input { width: 9.5em; }
-    #auth-bar button.link { border: 0; background: none; color: #2e7d32; text-decoration: underline; padding: 5px 2px; }
+                font-family: -apple-system, system-ui, sans-serif; font-size: 13px; color: var(--bar-fg);
+                background: var(--bar-bg); border-bottom: 1px solid var(--line); padding: 8px 16px;
+                display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+    #auth-status { flex: 1 1 auto; min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #auth-msg { flex-basis: 100%; color: var(--muted); }
+    #auth-msg:empty { display: none; }
+    #root { position: fixed; top: var(--auth-bar-h, 40px); left: 0; right: 0; bottom: 0; overflow: auto; }
+    /* 버튼·입력칸은 글자색·배경색을 직접 정함 (아이폰 다크 모드에서 흰 버튼에 흰 글자가 되는 문제) */
+    .pill { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line);
+            background: var(--sheet-bg); color: var(--bar-fg); cursor: pointer; -webkit-appearance: none; }
+    .pill.acc { background: var(--acc); border-color: var(--acc); color: #fff; font-weight: 600; }
+    /* 로그인·가입 창 */
+    #auth-sheet { position: fixed; inset: 0; z-index: 2000; background: rgba(0,0,0,.45); display: flex;
+                  align-items: flex-end; justify-content: center; font-family: -apple-system, system-ui, sans-serif; }
+    #auth-sheet .card { width: 100%; max-width: 440px; box-sizing: border-box; background: var(--sheet-bg); color: var(--bar-fg);
+                        border-radius: 22px 22px 0 0; padding: 18px 20px calc(24px + env(safe-area-inset-bottom)); }
+    @media (min-width: 600px) { #auth-sheet { align-items: center; } #auth-sheet .card { border-radius: 22px; } }
+    #auth-sheet .head { display: flex; align-items: center; margin-bottom: 14px; }
+    #auth-sheet .head h2 { flex: 1; text-align: center; font-size: 17px; margin: 0; }
+    #auth-sheet .x { border: 0; background: none; color: var(--muted); font-size: 22px; width: 32px; cursor: pointer; }
+    .tabs { display: flex; background: var(--field); border-radius: 10px; padding: 3px; margin-bottom: 16px; }
+    .tabs button { flex: 1; border: 0; background: none; color: var(--muted); font: inherit; font-size: 15px; padding: 8px;
+                   border-radius: 8px; cursor: pointer; }
+    .tabs button.on { background: var(--sheet-bg); color: var(--bar-fg); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+    .field { display: block; width: 100%; box-sizing: border-box; font: inherit; font-size: 17px; padding: 13px 14px;
+             margin-bottom: 10px; border-radius: 12px; border: 1px solid transparent; background: var(--field);
+             color: var(--bar-fg); outline: none; -webkit-appearance: none; }
+    .field:focus { border-color: var(--acc); }
+    .big { display: block; width: 100%; font: inherit; font-size: 17px; font-weight: 600; padding: 14px; margin-top: 6px;
+           border: 0; border-radius: 12px; background: var(--acc); color: #fff; cursor: pointer; -webkit-appearance: none; }
+    .sub { display: block; width: 100%; margin-top: 12px; border: 0; background: none; color: var(--acc); font: inherit;
+           font-size: 14px; cursor: pointer; }
+    .note { font-size: 13px; color: var(--muted); line-height: 1.45; margin: 4px 2px 10px; }
+    #sheet-msg { font-size: 14px; line-height: 1.45; margin: 10px 2px 0; min-height: 1em; }
+    #sheet-msg.err { color: #FF3B30; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -39,26 +67,51 @@
   <!-- 로그인 바: 로그인은 자바스크립트(supabase-js)가 하고, 결과를 브라우저 속 Python에 파일로 넘긴다 -->
   <div id="auth-bar">
     <span id="auth-status">로그인 확인 중…</span>
-    <!-- 간편 로그인: 이메일 + 비밀번호. 처음이면 [회원가입] (확인 메일 한 번), 비밀번호가 없거나 잊었으면 [메일 코드로] -->
-    <form id="auth-email-form" hidden>
-      <input id="auth-email" type="email" required placeholder="이메일" autocomplete="email" />
-      <input id="auth-password" type="password" placeholder="비밀번호" autocomplete="current-password" minlength="6" />
-      <button type="submit">로그인</button>
-      <button type="button" id="auth-signup">회원가입</button>
-      <button type="button" id="auth-otp" class="link">처음이면 · 메일 코드로</button>
-    </form>
-    <form id="auth-setpw-form" hidden>
-      <input id="auth-newpw" type="password" required minlength="6" placeholder="새 비밀번호 (6자 이상)" autocomplete="new-password" />
-      <button type="submit">비밀번호 저장</button>
-    </form>
-    <button id="auth-setpw" hidden>비밀번호 설정</button>
-    <form id="auth-code-form" hidden>
-      <input id="auth-code" inputmode="numeric" pattern="[0-9]{6,10}" placeholder="메일의 숫자 코드" autocomplete="one-time-code" />
-      <button type="submit">코드로 로그인</button>
-    </form>
-    <button id="push-btn" hidden>알림 켜기</button>
-    <button id="auth-logout" hidden>로그아웃</button>
+    <button id="auth-open" class="pill acc" hidden>로그인 · 가입</button>
+    <button id="push-btn" class="pill" hidden>알림 켜기</button>
+    <button id="auth-setpw" class="pill" hidden>비밀번호</button>
+    <button id="auth-logout" class="pill" hidden>로그아웃</button>
     <span id="auth-msg"></span>
+  </div>
+
+  <!-- 로그인 · 회원가입 창: [로그인 | 회원가입] 탭, 메일 코드 단계, 비밀번호 정하기 단계 -->
+  <div id="auth-sheet" hidden>
+    <div class="card" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <div class="head"><span style="width:32px"></span><h2 id="sheet-title">로그인</h2>
+        <button class="x" id="sheet-close" aria-label="닫기">×</button></div>
+      <div class="tabs" id="sheet-tabs">
+        <button data-tab="login" class="on">로그인</button><button data-tab="signup">회원가입</button>
+      </div>
+      <form id="step-login">
+        <input class="field" id="in-email" type="email" placeholder="이메일" autocomplete="email" required />
+        <input class="field" id="in-password" type="password" placeholder="비밀번호" autocomplete="current-password" required />
+        <button class="big" type="submit">로그인</button>
+        <button class="sub" type="button" id="go-code-login">비밀번호를 잊었어요 · 메일 코드로 로그인</button>
+      </form>
+      <form id="step-signup" hidden>
+        <input class="field" id="up-email" type="email" placeholder="이메일" autocomplete="email" required />
+        <input class="field" id="up-password" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="new-password"
+               minlength="6" required />
+        <p class="note">가입하면 확인 메일이 와요. 메일의 링크를 한 번 누르면 끝 — 그다음부터는 이메일과 비밀번호로 로그인해요.</p>
+        <button class="big" type="submit">가입하기</button>
+        <button class="sub" type="button" id="go-code-signup">비밀번호 없이 · 메일 코드로 가입</button>
+      </form>
+      <form id="step-code" hidden>
+        <p class="note" id="code-note">메일로 보낸 숫자 코드를 넣어 주세요.</p>
+        <input class="field" id="in-code" inputmode="numeric" autocomplete="one-time-code" placeholder="숫자 코드"
+               style="letter-spacing: 4px; text-align: center; font-size: 22px" required />
+        <button class="big" type="submit">확인</button>
+        <button class="sub" type="button" id="code-back">← 이메일 다시 입력</button>
+      </form>
+      <form id="step-setpw" hidden>
+        <p class="note">다음부터 이메일 + 비밀번호로 바로 로그인하도록 비밀번호를 정해 주세요.</p>
+        <input class="field" id="in-newpw" type="password" placeholder="새 비밀번호 (6자 이상)" autocomplete="new-password"
+               minlength="6" required />
+        <button class="big" type="submit">비밀번호 저장</button>
+        <button class="sub" type="button" id="setpw-later">나중에 할게요</button>
+      </form>
+      <p id="sheet-msg"></p>
+    </div>
   </div>
   <div id="root">
     <p id="loading">카페인 측정기를 불러오는 중이에요. 처음엔 10~20초 걸려요…</p>
@@ -83,17 +136,34 @@
       access_token: s.access_token, expires_at: s.expires_at,
     } : {});
 
+    // ── 로그인 · 가입 창 ──
+    const STEPS = ["step-login", "step-signup", "step-code", "step-setpw"];
+    const TITLE = { "step-login": "로그인", "step-signup": "회원가입", "step-code": "메일 코드", "step-setpw": "비밀번호 정하기" };
+    let codeEmail = "";
+    function msg(text, err = false) { $("sheet-msg").textContent = text; $("sheet-msg").className = err ? "err" : ""; }
+    function step(name, { tabs = true } = {}) {
+      STEPS.forEach((id) => { $(id).hidden = id !== name; });
+      $("sheet-tabs").hidden = !tabs;
+      document.querySelectorAll("#sheet-tabs button").forEach((b) => b.classList.toggle("on", `step-${b.dataset.tab}` === name));
+      $("sheet-title").textContent = TITLE[name];
+      msg("");
+    }
+    function openSheet(name = "step-login", opts) { $("auth-sheet").hidden = false; step(name, opts); }
+    function closeSheet() { $("auth-sheet").hidden = true; }
+    $("auth-open").onclick = () => openSheet("step-login");
+    $("sheet-close").onclick = closeSheet;
+    $("auth-sheet").addEventListener("click", (e) => { if (e.target.id === "auth-sheet") closeSheet(); });
+    document.querySelectorAll("#sheet-tabs button").forEach((b) => b.onclick = () => step(`step-${b.dataset.tab}`));
+
     function showAuth(session) {
-      $("auth-status").textContent = session ? `${session.user.email} 로그인됨` : "로그인하면 입력을 저장하고 다음에 불러올 수 있어요";
-      $("auth-email-form").hidden = !!session;
+      $("auth-status").textContent = session ? `${session.user.email}` : "로그인하면 기록이 저장돼요";
+      $("auth-open").hidden = !!session;
       $("auth-logout").hidden = !session;
       $("auth-setpw").hidden = !session;
-      if (session) { $("auth-code-form").hidden = true; $("auth-msg").textContent = ""; }
-      // 비밀번호 재설정 메일로 돌아왔거나, 코드로 처음 들어온 사람에게 비밀번호 설정 칸을 바로 보여준다
+      // 코드로 처음 들어왔거나 비밀번호 재설정 메일로 돌아오면 바로 비밀번호 정하기
       if (session && (new URLSearchParams(location.search).has("reset") || sessionStorage.getItem("askPassword"))) {
         sessionStorage.removeItem("askPassword");
-        $("auth-setpw-form").hidden = false;
-        $("auth-msg").textContent = "다음부터 간편하게 로그인하도록 비밀번호를 정해 주세요.";
+        openSheet("step-setpw", { tabs: false });
       }
     }
     const redirect = location.origin + location.pathname;
@@ -102,7 +172,7 @@
     const { data: { session } } = await supabase.auth.getSession();
     showAuth(session);
 
-    const KO = { "Invalid login credentials": "이메일 또는 비밀번호가 맞지 않아요. 비밀번호를 정한 적이 없으면 [메일 코드로]를 눌러 주세요.",
+    const KO = { "Invalid login credentials": "이메일 또는 비밀번호가 맞지 않아요. 비밀번호를 정한 적이 없으면 아래 [메일 코드로 로그인]을 눌러 주세요.",
                  "Email not confirmed": "가입 확인 메일의 링크를 먼저 눌러 주세요.",
                  "User already registered": "이미 가입된 이메일이에요. [로그인] 또는 [메일 코드로]를 써 주세요.",
                  "Signups not allowed for otp": "새 가입이 막혀 있어요. 관리자에게 알려 주세요.",
@@ -111,56 +181,58 @@
     // 같은 메일을 너무 자주 요청하면 Supabase가 잠시 막는다 (예: "For security purposes, you can only request this after 37 seconds.")
     const wait = (m) => (m.match(/after (\d+) seconds/) || [])[1];
     const say = (error) => { const w = wait(error.message);
-      $("auth-msg").textContent = w ? `${w}초 뒤에 다시 눌러 주세요 (같은 메일을 너무 자주 보낼 수 없어요).` : (KO[error.message] ?? error.message); };
+      msg(w ? `${w}초 뒤에 다시 눌러 주세요 (같은 메일을 너무 자주 보낼 수 없어요).` : (KO[error.message] ?? error.message), true); };
 
     // 로그인: 이메일 + 비밀번호
-    $("auth-email-form").addEventListener("submit", async (e) => {
+    $("step-login").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const email = $("auth-email").value.trim(), password = $("auth-password").value;
-      if (!password) { $("auth-msg").textContent = "비밀번호를 넣어 주세요. 처음이면 [회원가입], 비밀번호가 없으면 [메일 코드로]."; return; }
-      $("auth-msg").textContent = "로그인 중…";
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      msg("로그인 중…");
+      const { error } = await supabase.auth.signInWithPassword({ email: $("in-email").value.trim(), password: $("in-password").value });
       if (error) say(error);
     });
-    // 회원가입: 이메일 확인 한 번 → 그다음부터는 비밀번호로
-    $("auth-signup").addEventListener("click", async () => {
-      const email = $("auth-email").value.trim(), password = $("auth-password").value;
-      if (!email || password.length < 6) { $("auth-msg").textContent = "이메일과 비밀번호(6자 이상)를 넣고 [회원가입]을 눌러 주세요."; return; }
-      $("auth-msg").textContent = "가입 중…";
-      const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: redirect } });
+    // 회원가입: 이메일 + 비밀번호 → 확인 메일 한 번
+    $("step-signup").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      msg("가입 중…");
+      const { data, error } = await supabase.auth.signUp({
+        email: $("up-email").value.trim(), password: $("up-password").value, options: { emailRedirectTo: redirect } });
       if (error) return say(error);
-      if (data.user && data.user.identities && data.user.identities.length === 0)
-        return say({ message: "User already registered" });
-      $("auth-msg").textContent = data.session ? "가입했어요." : "확인 메일을 보냈어요. 메일의 링크를 누르면 가입이 끝나요 (한 번만). 그다음부터는 비밀번호로 로그인해요.";
+      if (data.user && data.user.identities && data.user.identities.length === 0) return say({ message: "User already registered" });
+      msg(data.session ? "가입했어요." : "확인 메일을 보냈어요. 메일의 링크를 누르면 가입이 끝나요 (한 번만). 그다음부터는 [로그인]에서 이메일과 비밀번호로 들어와요.");
     });
-    // 메일 코드로 가입·로그인 (처음이거나 비밀번호가 없거나 잊었을 때) → 들어온 뒤 비밀번호를 정하게 한다
-    $("auth-otp").addEventListener("click", async () => {
-      const email = $("auth-email").value.trim();
-      if (!email) { $("auth-msg").textContent = "이메일을 넣고 [메일 코드로]를 눌러 주세요."; return; }
-      $("auth-msg").textContent = "보내는 중…";
+    // 메일 코드로 가입·로그인 (비밀번호 없이 / 잊었을 때) → 들어오면 비밀번호 정하기
+    async function sendCode(emailInput) {
+      const email = $(emailInput).value.trim();
+      if (!email) { msg("이메일을 먼저 넣어 주세요.", true); $(emailInput).focus(); return; }
+      msg("보내는 중…");
       sessionStorage.setItem("askPassword", "1");
       const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect + "?reset=1" } });
       if (error) { sessionStorage.removeItem("askPassword"); return say(error); }
-      $("auth-msg").textContent = "메일을 보냈어요. 메일의 숫자 코드를 아래에 넣거나, 메일의 링크를 누르세요. 들어오면 비밀번호를 정해요.";
-      $("auth-code-form").hidden = false;
-      $("auth-code").focus();
-    });
-    // 비밀번호 설정·변경 (로그인한 상태에서)
-    $("auth-setpw").addEventListener("click", () => { $("auth-setpw-form").hidden = !$("auth-setpw-form").hidden; });
-    $("auth-setpw-form").addEventListener("submit", async (e) => {
+      codeEmail = email;
+      step("step-code", { tabs: false });
+      $("code-note").textContent = `${email}로 보낸 숫자 코드를 넣어 주세요. (메일의 링크를 눌러도 돼요)`;
+      $("in-code").focus();
+    }
+    $("go-code-login").onclick = () => sendCode("in-email");
+    $("go-code-signup").onclick = () => sendCode("up-email");
+    $("code-back").onclick = () => step("step-login");
+    $("step-code").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const { error } = await supabase.auth.updateUser({ password: $("auth-newpw").value });
-      if (error) return say(error);
-      $("auth-setpw-form").hidden = true; $("auth-newpw").value = "";
-      $("auth-msg").textContent = "비밀번호를 저장했어요. 다음부터는 이메일 + 비밀번호로 로그인해요.";
-      if (location.search.includes("reset")) history.replaceState(null, "", location.pathname);
-    });
-    $("auth-code-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const { error } = await supabase.auth.verifyOtp({
-        email: $("auth-email").value.trim(), token: $("auth-code").value.trim(), type: "email",
-      });
+      msg("확인 중…");
+      const { error } = await supabase.auth.verifyOtp({ email: codeEmail, token: $("in-code").value.trim(), type: "email" });
       if (error) say(error);
+    });
+    // 비밀번호 정하기·바꾸기 (로그인한 상태)
+    $("auth-setpw").onclick = () => openSheet("step-setpw", { tabs: false });
+    $("setpw-later").onclick = closeSheet;
+    $("step-setpw").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const { error } = await supabase.auth.updateUser({ password: $("in-newpw").value });
+      if (error) return say(error);
+      $("in-newpw").value = "";
+      if (location.search.includes("reset")) history.replaceState(null, "", location.pathname);
+      closeSheet();
+      $("auth-msg").textContent = "비밀번호를 저장했어요. 다음부터는 이메일 + 비밀번호로 로그인해요.";
     });
     $("auth-logout").addEventListener("click", async () => {
       await removeThisDevice();   // 로그아웃한 기기로는 알림을 보내지 않게
