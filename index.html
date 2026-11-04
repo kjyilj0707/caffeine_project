@@ -83,14 +83,14 @@
         <button data-tab="login" class="on">로그인</button><button data-tab="signup">회원가입</button>
       </div>
       <form id="step-login">
-        <input class="field" id="in-email" type="email" placeholder="이메일" autocomplete="email" required />
-        <input class="field" id="in-password" type="password" placeholder="비밀번호" autocomplete="current-password" required />
+        <input class="field" id="in-email" name="email" type="email" placeholder="이메일" autocomplete="username" required />
+        <input class="field" id="in-password" name="password" type="password" placeholder="비밀번호" autocomplete="current-password" required />
         <button class="big" type="submit">로그인</button>
         <button class="sub" type="button" id="go-code-login">비밀번호를 잊었어요 · 메일 코드로 로그인</button>
       </form>
       <form id="step-signup" hidden>
-        <input class="field" id="up-email" type="email" placeholder="이메일" autocomplete="email" required />
-        <input class="field" id="up-password" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="new-password"
+        <input class="field" id="up-email" name="email" type="email" placeholder="이메일" autocomplete="username" required />
+        <input class="field" id="up-password" name="new-password" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="new-password"
                minlength="6" required />
         <p class="note">가입하면 메일로 숫자 코드가 와요. 코드를 한 번 넣으면 끝 — 그다음부터는 이메일과 비밀번호로 로그인해요.</p>
         <button class="big" type="submit">가입하기</button>
@@ -131,7 +131,11 @@
     const SUPABASE_URL = "https://arqruewigqgzbmlsgjad.supabase.co";
     const SUPABASE_KEY = "sb_publishable_d3_p7eyo_DVHwgFvXXMbqw_Z1Pngu2j";
     const SESSION_FILE = ".auth_session.json";  // app/account.py의 SESSION_FILE과 같은 이름
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    // 로그인 유지: 이 기기 브라우저 저장소에 로그인 정보를 두고(persistSession) 만료 전에 자동 갱신(autoRefreshToken)
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    });
+    const LAST_EMAIL = "caffeine-last-email";   // 마지막으로 쓴 이메일 (로그인 창에 미리 채움)
     const $ = (id) => document.getElementById(id);
     // 바가 좁은 화면에서 두 줄이 되어도 앱이 바에 가리지 않게
     new ResizeObserver(() => document.documentElement.style.setProperty(
@@ -154,7 +158,12 @@
       $("sheet-title").textContent = TITLE[name];
       msg("");
     }
-    function openSheet(name = "step-login", opts) { $("auth-sheet").hidden = false; step(name, opts); }
+    function openSheet(name = "step-login", opts) {
+      $("auth-sheet").hidden = false; step(name, opts);
+      const last = localStorage.getItem(LAST_EMAIL);
+      if (last && !$("in-email").value) $("in-email").value = last;
+      if (name === "step-login") (last ? $("in-password") : $("in-email")).focus();
+    }
     function closeSheet() { $("auth-sheet").hidden = true; }
     $("auth-open").onclick = () => openSheet("step-login");
     $("sheet-close").onclick = closeSheet;
@@ -175,7 +184,13 @@
     const redirect = APP_URL;
 
     // 메일 링크로 돌아온 경우 주소에 담긴 로그인 정보를 여기서 처리한다
-    const { data: { session } } = await supabase.auth.getSession();
+    let { data: { session } } = await supabase.auth.getSession();
+    // 저장된 로그인이 5분 안에 끝나면 앱을 띄우기 전에 먼저 갱신 (오래된 열쇠가 Python으로 넘어가 로그아웃처럼 보이지 않게)
+    if (session && session.expires_at * 1000 - Date.now() < 5 * 60 * 1000) {
+      const { data } = await supabase.auth.refreshSession();
+      session = data.session ?? session;
+    }
+    if (session && session.user.email) localStorage.setItem(LAST_EMAIL, session.user.email);
     showAuth(session);
 
     const KO = { "Invalid login credentials": "이메일 또는 비밀번호가 맞지 않아요. 비밀번호를 정한 적이 없으면 아래 [메일 코드로 로그인]을 눌러 주세요.",
@@ -193,8 +208,10 @@
     $("step-login").addEventListener("submit", async (e) => {
       e.preventDefault();
       msg("로그인 중…");
-      const { error } = await supabase.auth.signInWithPassword({ email: $("in-email").value.trim(), password: $("in-password").value });
-      if (error) say(error);
+      const email = $("in-email").value.trim();
+      const { error } = await supabase.auth.signInWithPassword({ email, password: $("in-password").value });
+      if (error) return say(error);
+      localStorage.setItem(LAST_EMAIL, email);
     });
     // 회원가입: 이메일 + 비밀번호 → 확인 메일 한 번
     $("step-signup").addEventListener("submit", async (e) => {
