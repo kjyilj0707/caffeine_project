@@ -125,7 +125,7 @@ def test_profile_page_updates_shared_data():
     at.switch_page("page_profile.py").run()
     assert not at.exception
     labels = [b.label for b in at.button if b.key and b.key.startswith("open_")]
-    assert [x.split(" · ")[0] for x in labels] == ["**기본**", "**건강**", "**카페인**", "**화면**"]   # 첫 화면 = 항목 목록
+    assert [x.split(" · ")[0] for x in labels] == ["**기본**", "**건강**", "**카페인**", "**화면**", "**의견 보내기**"]   # 첫 화면 = 항목 목록
     at.button(key="open_basic").click().run()
     at.radio(key="sex_0").set_value("여성").run()
     assert at.session_state.data["sex"] == "남성"                         # 반영 전에는 그대로
@@ -267,3 +267,17 @@ def test_dial_typed_input_parsing():
     assert dial.parse_date("11/3", today) == date(2026, 11, 3) and dial.parse_date("어제", today) == date(2026, 11, 3)
     assert dial.parse_date("2026-10-30", today) == date(2026, 10, 30) and dial.parse_date("13/40", today) is None
     assert dial.parse_number("250") == 250 and dial.parse_number("7분") == 7 and dial.parse_number("x") is None
+
+
+def test_opinion_section_sends_without_login(monkeypatch):
+    import store
+    sent = []
+    monkeypatch.setattr(store, "send_app_feedback", lambda s, c, m, contact="", page="", user_agent="": sent.append((s, c, m)))
+    at = _app().run()
+    at.switch_page("page_profile.py").run()
+    at.button(key="open_opinion").click().run()
+    at.radio(key="opinion_cat_0").set_value("기능 요청").run()
+    at.text_area(key="opinion_msg_0").input("친구랑 비교 기능").run()
+    at.button(key="opinion_send").click().run()
+    assert not at.exception and sent == [(None, "기능 요청", "친구랑 비교 기능")]     # 로그인 없이 (session=None)
+    assert any("보냈어요" in x.value for x in at.success)

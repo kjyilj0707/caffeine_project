@@ -14,6 +14,10 @@ from typing import Callable, Dict, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 SESSION_FILE = ROOT / ".auth_session.json"   # index.html의 SESSION_FILE과 같은 이름
+# 공개용 주소·키 (index.html과 같은 값, 누구에게 보여도 되는 키 — 데이터 보호는 RLS가 함).
+# 로그인 안 한 사람이 '의견 보내기'처럼 누구나 쓸 수 있는 표에 쓸 때 쓴다.
+PUBLIC_URL = "https://arqruewigqgzbmlsgjad.supabase.co"
+PUBLIC_KEY = "sb_publishable_d3_p7eyo_DVHwgFvXXMbqw_Z1Pngu2j"
 
 # (method, url, headers, body) → (status, 응답 글)
 Transport = Callable[[str, str, Dict[str, str], Optional[str]], Tuple[int, str]]
@@ -65,16 +69,19 @@ def default_transport() -> Transport:
     return _send_browser if sys.platform == "emscripten" else _send_cpython
 
 
-def rest(session: Session, method: str, path: str, body=None, transport: Optional[Transport] = None,
-         prefer: Optional[str] = None):
+def rest(session: Optional[Session], method: str, path: str, body=None, transport: Optional[Transport] = None,
+         prefer: Optional[str] = None, returning: bool = True):
     """서버 표 읽기·쓰기 (PostgREST). 예: rest(s, "GET", "profiles?select=*")
     로그인한 사람의 열쇠로 요청하므로 RLS 규칙에 따라 자기 행만 보인다.
-    prefer: 추가 요청 방식. 예: "resolution=merge-duplicates" (있으면 고치고 없으면 넣기)"""
-    headers = {"apikey": session.key, "Authorization": f"Bearer {session.access_token}",
-               "Content-Type": "application/json",
-               "Prefer": ",".join(filter(None, ["return=representation", prefer]))}
+    prefer: 추가 요청 방식. 예: "resolution=merge-duplicates" (있으면 고치고 없으면 넣기)
+    session=None: 로그인 안 한 사람(anon)으로 요청 — 누구나 쓸 수 있는 표에만 쓸 수 있다.
+    returning=False: 넣은 행을 돌려받지 않음 (읽기 규칙이 없는 표에 쓸 때 필요)."""
+    url, key = (session.url, session.key) if session else (PUBLIC_URL, PUBLIC_KEY)
+    token = session.access_token if session else PUBLIC_KEY
+    headers = {"apikey": key, "Authorization": f"Bearer {token}", "Content-Type": "application/json",
+               "Prefer": ",".join(filter(None, ["return=representation" if returning else "return=minimal", prefer]))}
     data = json.dumps(body, ensure_ascii=False) if body is not None else None
-    status, text = (transport or default_transport())(method, f"{session.url}/rest/v1/{path}", headers, data)
+    status, text = (transport or default_transport())(method, f"{url}/rest/v1/{path}", headers, data)
     if not 200 <= status < 300:
         raise RuntimeError(f"서버 응답 {status}: {text[:300]}")
     return json.loads(text) if text else None

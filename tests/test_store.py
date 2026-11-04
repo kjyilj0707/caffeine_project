@@ -235,3 +235,19 @@ def test_morning_first_open_goes_to_day_input(monkeypatch):
 def test_logged_in_with_sleep_record_opens_plan(monkeypatch):
     at, _ = _app(monkeypatch, SAVED)
     assert any("오늘 추천" in m.value for m in at.markdown)
+
+
+def test_send_app_feedback_works_without_login():
+    sent = []
+    fake = lambda method, url, headers, body: sent.append((method, url, headers, json.loads(body))) or (201, "")
+    store.send_app_feedback(None, "버그", "  휠이 안 돌아가요  ", "", page="설정", transport=fake)
+    method, url, headers, body = sent[0]
+    assert method == "POST" and url.endswith("/rest/v1/app_feedback")
+    assert headers["Authorization"] == f"Bearer {account.PUBLIC_KEY}"          # 로그인 없이 공개 키로
+    assert "return=minimal" in headers["Prefer"]                               # 읽기 규칙이 없어 돌려받지 않음
+    assert body == {"category": "버그", "message": "휠이 안 돌아가요", "contact": None, "page": "설정", "user_agent": None}
+    store.send_app_feedback(SESSION, "기타", "좋아요", transport=fake)
+    assert sent[1][2]["Authorization"] == "Bearer tok"                        # 로그인했으면 내 열쇠로
+    import pytest
+    with pytest.raises(ValueError):
+        store.send_app_feedback(None, "버그", "   ", transport=fake)

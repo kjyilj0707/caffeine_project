@@ -15,7 +15,8 @@ from caffeine_engine import params
 
 PREGNANCY = ["아니오", "임신 초기 (1~3개월)", "임신 중기 (4~6개월)", "임신 후기 (7개월~)"]
 SECTIONS = {"basic": ("기본", ":material/person:"), "health": ("건강", ":material/favorite:"),
-            "caffeine": ("카페인", ":material/local_cafe:"), "display": ("화면", ":material/contrast:")}
+            "caffeine": ("카페인", ":material/local_cafe:"), "display": ("화면", ":material/contrast:"),
+            "opinion": ("의견 보내기", ":material/chat:")}
 CAP_OPTIONS = ["권고량"] + list(range(50, 1001, 25))
 
 d = state.data()
@@ -84,6 +85,8 @@ def summary(section: str) -> str:
     if section == "caffeine":
         cap = f"{prof['daily_cap_mg']:g}mg" if prof.get("daily_cap_mg") else "권고량"
         return f"민감도 {SENSITIVITY_LABEL[prof.get('sensitivity', 'normal')]} · 하루 최대 {cap}"
+    if section == "opinion":
+        return "불편한 점 · 버그 · 바라는 기능"
     return theme.saved_mode()
 
 
@@ -183,6 +186,30 @@ elif section == "display":
     st.caption("고르면 화면을 새로 불러와요. 시스템 설정 = 핸드폰·컴퓨터의 다크 모드 설정을 따라감")
     if st.session_state.get("apply_theme"):
         theme.apply(st.session_state.pop("apply_theme"))
+    st.stop()
+
+# ── 의견 보내기: 로그인 안 해도 됨 (설정 반영과 상관없으므로 버튼도 따로) ──
+elif section == "opinion":
+    if st.session_state.pop("opinion_sent", False):
+        st.success("보냈어요. 고마워요! 읽고 반영할게요.")
+    st.caption("앱을 쓰면서 불편했던 점, 이상하게 동작한 것, 있었으면 하는 기능을 자유롭게 적어 주세요.")
+    ver = st.session_state.get("opinion_ver", 0)          # 보낸 뒤 칸을 비우려고 이름을 바꿈
+    category = st.radio("종류", store.FEEDBACK_CATEGORIES, horizontal=True, key=f"opinion_cat_{ver}")
+    message = st.text_area("내용", key=f"opinion_msg_{ver}", max_chars=2000, height=160,
+                           placeholder="예: 하루 입력에서 휠이 잘 안 돌아가요 / 친구랑 기록 비교 기능이 있으면 좋겠어요")
+    contact = st.text_input("답장 받을 곳 (선택)", key=f"opinion_contact_{ver}",
+                            placeholder="이메일이나 카톡 아이디 — 비워 둬도 돼요")
+    if st.button("보내기", type="primary", width="stretch", key="opinion_send", disabled=not message.strip()):
+        try:
+            store.send_app_feedback(s, category, message, contact, page="설정",
+                                    user_agent=st.context.headers.get("User-Agent", "") if st.context.headers else "")
+        except Exception as e:
+            st.error(f"보내지 못했어요: {e}")
+        else:
+            st.session_state.opinion_sent = True
+            st.session_state.opinion_ver = ver + 1
+            st.rerun()
+    st.caption("로그인했으면 누가 보냈는지 함께 저장돼요. 보낸 의견은 다른 사람에게 보이지 않아요.")
     st.stop()
 
 apply_button()

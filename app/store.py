@@ -346,3 +346,20 @@ def report_rows(session: Session, first: date, last: date, transport: Optional[T
         "kss": rest(session, "GET", f"feedback?select=at,kss&kind=eq.sleepiness&at=gte.{_q(lo)}&at=lt.{_q(hi)}"
                     f"&order=at.asc", **send),
     }
+
+
+# ── 앱 의견 보내기 (설정 → 의견 보내기) — 로그인 안 해도 됨 ──
+FEEDBACK_CATEGORIES = ["불편", "버그", "기능 요청", "기타"]
+
+
+def send_app_feedback(session: Optional[Session], category: str, message: str, contact: str = "",
+                      page: str = "", user_agent: str = "", transport: Optional[Transport] = None) -> None:
+    """app_feedback 표에 한 줄. 표에는 읽기 규칙이 없어 넣은 행을 돌려받지 않는다(returning=False)."""
+    message = message.strip()
+    if category not in FEEDBACK_CATEGORIES:
+        raise ValueError("의견 종류를 골라 주세요")
+    if not message:
+        raise ValueError("내용을 적어 주세요")
+    row = {"category": category, "message": message[:2000], "contact": contact.strip()[:200] or None,
+           "page": page[:100] or None, "user_agent": user_agent[:500] or None}
+    rest(session, "POST", "app_feedback", row, transport=transport, returning=False)
