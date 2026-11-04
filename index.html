@@ -45,7 +45,7 @@
       <input id="auth-password" type="password" placeholder="비밀번호" autocomplete="current-password" minlength="6" />
       <button type="submit">로그인</button>
       <button type="button" id="auth-signup">회원가입</button>
-      <button type="button" id="auth-otp" class="link">메일 코드로</button>
+      <button type="button" id="auth-otp" class="link">처음이면 · 메일 코드로</button>
     </form>
     <form id="auth-setpw-form" hidden>
       <input id="auth-newpw" type="password" required minlength="6" placeholder="새 비밀번호 (6자 이상)" autocomplete="new-password" />
@@ -104,8 +104,14 @@
 
     const KO = { "Invalid login credentials": "이메일 또는 비밀번호가 맞지 않아요. 비밀번호를 정한 적이 없으면 [메일 코드로]를 눌러 주세요.",
                  "Email not confirmed": "가입 확인 메일의 링크를 먼저 눌러 주세요.",
-                 "User already registered": "이미 가입된 이메일이에요. [로그인] 또는 [메일 코드로]를 써 주세요." };
-    const say = (error) => { $("auth-msg").textContent = KO[error.message] ?? error.message; };
+                 "User already registered": "이미 가입된 이메일이에요. [로그인] 또는 [메일 코드로]를 써 주세요.",
+                 "Signups not allowed for otp": "새 가입이 막혀 있어요. 관리자에게 알려 주세요.",
+                 "Token has expired or is invalid": "코드가 틀렸거나 시간이 지났어요. [메일 코드로]를 다시 눌러 주세요.",
+                 "Password should be at least 6 characters.": "비밀번호는 6자 이상이어야 해요." };
+    // 같은 메일을 너무 자주 요청하면 Supabase가 잠시 막는다 (예: "For security purposes, you can only request this after 37 seconds.")
+    const wait = (m) => (m.match(/after (\d+) seconds/) || [])[1];
+    const say = (error) => { const w = wait(error.message);
+      $("auth-msg").textContent = w ? `${w}초 뒤에 다시 눌러 주세요 (같은 메일을 너무 자주 보낼 수 없어요).` : (KO[error.message] ?? error.message); };
 
     // 로그인: 이메일 + 비밀번호
     $("auth-email-form").addEventListener("submit", async (e) => {
@@ -127,16 +133,17 @@
         return say({ message: "User already registered" });
       $("auth-msg").textContent = data.session ? "가입했어요." : "확인 메일을 보냈어요. 메일의 링크를 누르면 가입이 끝나요 (한 번만). 그다음부터는 비밀번호로 로그인해요.";
     });
-    // 메일 코드로 로그인 (비밀번호가 없거나 잊었을 때) → 들어온 뒤 비밀번호를 정하게 한다
+    // 메일 코드로 가입·로그인 (처음이거나 비밀번호가 없거나 잊었을 때) → 들어온 뒤 비밀번호를 정하게 한다
     $("auth-otp").addEventListener("click", async () => {
       const email = $("auth-email").value.trim();
       if (!email) { $("auth-msg").textContent = "이메일을 넣고 [메일 코드로]를 눌러 주세요."; return; }
       $("auth-msg").textContent = "보내는 중…";
       sessionStorage.setItem("askPassword", "1");
-      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect + "?reset=1", shouldCreateUser: false } });
+      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect + "?reset=1" } });
       if (error) { sessionStorage.removeItem("askPassword"); return say(error); }
-      $("auth-msg").textContent = "메일을 보냈어요. 메일의 링크를 누르거나, 숫자 코드를 입력하세요.";
+      $("auth-msg").textContent = "메일을 보냈어요. 메일의 숫자 코드를 아래에 넣거나, 메일의 링크를 누르세요. 들어오면 비밀번호를 정해요.";
       $("auth-code-form").hidden = false;
+      $("auth-code").focus();
     });
     // 비밀번호 설정·변경 (로그인한 상태에서)
     $("auth-setpw").addEventListener("click", () => { $("auth-setpw-form").hidden = !$("auth-setpw-form").hidden; });
@@ -153,7 +160,7 @@
       const { error } = await supabase.auth.verifyOtp({
         email: $("auth-email").value.trim(), token: $("auth-code").value.trim(), type: "email",
       });
-      if (error) $("auth-msg").textContent = `${error.message}`;
+      if (error) say(error);
     });
     $("auth-logout").addEventListener("click", async () => {
       await removeThisDevice();   // 로그아웃한 기기로는 알림을 보내지 않게
